@@ -1,0 +1,155 @@
+{
+  "$comment": [
+    "Canonical LTV vectors. ТЗ section 7 requires the on-chain program, the",
+    "watcher, the web app and the bot to agree; this file is what they agree on.",
+    "",
+    "Everything here is an EXACT INTEGER. That is the whole point. The comparable",
+    "value is an integer number of basis points, and the two rules that keep four",
+    "implementations in step are:",
+    "",
+    "  1. Scale by BPS BEFORE dividing. `(debt * BPS) / collateral` rounds once;",
+    "     `(debt / collateral) * BPS` rounds twice and loses the boundary.",
+    "  2. Truncate toward zero. Not round-half-up, not round-half-even. The",
+    "     `exact half basis point` case below exists to pin this: it is the only",
+    "     rounding mode with no ambiguity at the boundary, and it is what integer",
+    "     division gives you in Rust, in TypeScript BigInt, and in SQL alike.",
+    "",
+    "`collateralValue` and `debtValue` are values in one common unit. On-chain",
+    "they are KLend `U68F60` fixed-point quantities and the unit is the market's",
+    "quote currency; the ratio is scale-invariant, so the vectors hold either way.",
+    "",
+    "`ltvBps` is the exact, UNCLAMPED result. The program stores its LTV in a",
+    "`u16` and therefore clamps to 10000 — see `clampedLtvBps`. Clamping can never",
+    "change a decision: every configured trigger is at most 10000, so a true ratio",
+    "above 10000 is above every trigger, and so is the clamped value. Off-chain",
+    "implementations report the unclamped number because a user reading `340%`",
+    "learns something that `100%` hides.",
+    "",
+    "Adding a case here is how the contract gets extended. Any implementation that",
+    "cannot reproduce a case is wrong, including the one that produced this file."
+  ],
+  "bps": 10000,
+  "ltvCases": [
+    {
+      "name": "no debt is zero regardless of collateral",
+      "collateralValue": "1000",
+      "debtValue": "0",
+      "ltvBps": 0,
+      "clampedLtvBps": 0
+    },
+    {
+      "name": "half the collateral borrowed",
+      "collateralValue": "1000",
+      "debtValue": "500",
+      "ltvBps": 5000,
+      "clampedLtvBps": 5000
+    },
+    {
+      "name": "exact half basis point truncates down, it does not round up",
+      "collateralValue": "200000",
+      "debtValue": "140010",
+      "ltvBps": 7000,
+      "clampedLtvBps": 7000
+    },
+    {
+      "name": "repeating decimal truncates rather than rounding to nearest",
+      "collateralValue": "1400",
+      "debtValue": "1000",
+      "ltvBps": 7142,
+      "clampedLtvBps": 7142
+    },
+    {
+      "name": "one unit below a whole basis point stays below it",
+      "collateralValue": "10000",
+      "debtValue": "6999",
+      "ltvBps": 6999,
+      "clampedLtvBps": 6999
+    },
+    {
+      "name": "debt with no collateral reads as maximum unhealthy, not as infinity",
+      "collateralValue": "0",
+      "debtValue": "500",
+      "ltvBps": 10000,
+      "clampedLtvBps": 10000
+    },
+    {
+      "name": "an empty position is zero, not maximally unhealthy",
+      "collateralValue": "0",
+      "debtValue": "0",
+      "ltvBps": 0,
+      "clampedLtvBps": 0
+    },
+    {
+      "name": "exactly fully borrowed",
+      "collateralValue": "1000",
+      "debtValue": "1000",
+      "ltvBps": 10000,
+      "clampedLtvBps": 10000
+    },
+    {
+      "name": "underwater reports above 100 percent, and clamps only on-chain",
+      "collateralValue": "100",
+      "debtValue": "1000",
+      "ltvBps": 100000,
+      "clampedLtvBps": 10000
+    },
+    {
+      "name": "real Q60 magnitudes: 1000 and 850 units in U68F60",
+      "collateralValue": "1152921504606846976000",
+      "debtValue": "979983278915819929600",
+      "ltvBps": 8500,
+      "clampedLtvBps": 8500
+    },
+    {
+      "name": "Q60 precision survives one unit of difference at the boundary",
+      "collateralValue": "1152921504606846976000",
+      "debtValue": "807045053224792883199",
+      "ltvBps": 6999,
+      "clampedLtvBps": 6999
+    }
+  ],
+  "repayCases": [
+    {
+      "name": "bring an 8500 bps position back to 7000 bps",
+      "collateralValue": "1000",
+      "debtValue": "850",
+      "targetBps": 7000,
+      "repayValue": "150"
+    },
+    {
+      "name": "a position already below target needs nothing repaid",
+      "collateralValue": "1000",
+      "debtValue": "600",
+      "targetBps": 7000,
+      "repayValue": "0"
+    },
+    {
+      "name": "with no collateral the whole debt has to go",
+      "collateralValue": "0",
+      "debtValue": "500",
+      "targetBps": 7000,
+      "repayValue": "500"
+    },
+    {
+      "name": "a zero target means repay everything",
+      "collateralValue": "1000",
+      "debtValue": "1000",
+      "targetBps": 0,
+      "repayValue": "1000"
+    },
+    {
+      "name": "the allowed debt truncates, so the required repayment rounds up",
+      "collateralValue": "200000",
+      "debtValue": "140010",
+      "targetBps": 7000,
+      "repayValue": "10"
+    },
+    {
+      "name": "Q60 magnitudes: 850 down to 700 units needs 150 units repaid",
+      "collateralValue": "1152921504606846976000",
+      "debtValue": "979983278915819929600",
+      "targetBps": 7000,
+      "repayValue": "172938225691027046400"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+[package]
+name = "mock-klend"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.79"
+publish = false
+
+# Standalone workspace, like tests/litesvm-harness: this crate is built by the
+# Solana 2.1.7 SBF toolchain and must keep its own pinned lockfile out of both the
+# on-chain workspace and the LiteSVM host graph.
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "mock_klend"
+
+[features]
+default = []
+no-entrypoint = []
+
+[dependencies]
+solana-program = "=2.1.7"
+
+[profile.release]
+overflow-checks = true

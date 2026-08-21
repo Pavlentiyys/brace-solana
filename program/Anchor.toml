@@ -1,0 +1,23 @@
+[toolchain]
+anchor_version = "0.31.1"
+solana_version = "2.1.7"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.localnet]
+guard = "Fg6PaFpoGXkYsidMpWxTWqkZpY6W2BeZ7FEfcYkgMQbS"
+
+[provider]
+cluster = "Localnet"
+wallet = "~/.config/solana/id.json"
+
+# `anchor build` is not the supported path here: the installed anchor-cli is 1.1.2
+# while this file pins 0.31.1. Use `cargo build-sbf` directly — see IMPLEMENTATION.md.
+[scripts]
+test-unit = "cargo test --workspace"
+test-litesvm = "cargo test --manifest-path tests/litesvm-harness/Cargo.toml"
+lint = "cargo clippy --workspace --all-targets -- -D warnings"
+build-program = "cargo build-sbf --manifest-path programs/guard/Cargo.toml"
+build-mock-klend = "cargo build-sbf --manifest-path tests/mock-klend/Cargo.toml"

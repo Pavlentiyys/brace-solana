@@ -1,0 +1,1157 @@
+{
+  "address": "Fg6PaFpoGXkYsidMpWxTWqkZpY6W2BeZ7FEfcYkgMQbS",
+  "metadata": {
+    "name": "guard",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Policy-constrained Kamino repay guard"
+  },
+  "instructions": [
+    {
+      "name": "deposit_reserve",
+      "discriminator": [
+        187,
+        75,
+        224,
+        96,
+        122,
+        233,
+        220,
+        121
+      ],
+      "accounts": [
+        {
+          "name": "guard",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "guard.owner",
+                "account": "GuardConfig"
+              },
+              {
+                "kind": "account",
+                "path": "guard.obligation",
+                "account": "GuardConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "guard"
+          ]
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "guard"
+              }
+            ]
+          },
+          "relations": [
+            "guard"
+          ]
+        },
+        {
+          "name": "owner_source",
+          "writable": true
+        },
+        {
+          "name": "vault_mint",
+          "relations": [
+            "guard"
+          ]
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "execute_action",
+      "discriminator": [
+        246,
+        137,
+        105,
+        113,
+        247,
+        6,
+        223,
+        174
+      ],
+      "accounts": [
+        {
+          "name": "guard",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "guard.owner",
+                "account": "GuardConfig"
+              },
+              {
+                "kind": "account",
+                "path": "guard.obligation",
+                "account": "GuardConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "guard"
+              }
+            ]
+          },
+          "relations": [
+            "guard"
+          ]
+        },
+        {
+          "name": "agent",
+          "signer": true
+        },
+        {
+          "name": "obligation",
+          "writable": true,
+          "relations": [
+            "guard"
+          ]
+        },
+        {
+          "name": "lending_market",
+          "relations": [
+            "guard"
+          ]
+        },
+        {
+          "name": "debt_reserve",
+          "writable": true,
+          "relations": [
+            "guard"
+          ]
+        },
+        {
+          "name": "vault_mint",
+          "relations": [
+            "guard"
+          ]
+        },
+        {
+          "name": "reserve_liquidity_supply",
+          "writable": true
+        },
+        {
+          "name": "lending_market_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  109,
+                  97
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "lending_market"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                4,
+                178,
+                172,
+                177,
+                18,
+                88,
+                204,
+                227,
+                104,
+                44,
+                65,
+                139,
+                168,
+                114,
+                255,
+                61,
+                249,
+                17,
+                2,
+                113,
+                47,
+                21,
+                175,
+                18,
+                182,
+                190,
+                105,
+                179,
+                67,
+                91,
+                0,
+                8
+              ]
+            }
+          }
+        },
+        {
+          "name": "lending_program",
+          "address": "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD"
+        },
+        {
+          "name": "farms_program",
+          "address": "FarmsPZpWu9i7Kky8tPN37rs2TpmMrAZrC7S7vJa91Hr"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "instruction_sysvar",
+          "address": "Sysvar1nstructions1111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "action_kind",
+          "type": "u8"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "init_guard",
+      "discriminator": [
+        80,
+        108,
+        68,
+        230,
+        253,
+        134,
+        39,
+        155
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "agent"
+        },
+        {
+          "name": "obligation"
+        },
+        {
+          "name": "lending_market"
+        },
+        {
+          "name": "debt_reserve"
+        },
+        {
+          "name": "vault_mint"
+        },
+        {
+          "name": "guard",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "account",
+                "path": "obligation"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "guard"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "InitGuardArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "revoke",
+      "discriminator": [
+        170,
+        23,
+        31,
+        34,
+        133,
+        173,
+        93,
+        242
+      ],
+      "accounts": [
+        {
+          "name": "guard",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "guard.owner",
+                "account": "GuardConfig"
+              },
+              {
+                "kind": "account",
+                "path": "guard.obligation",
+                "account": "GuardConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "owner",
+          "signer": true,
+          "relations": [
+            "guard"
+          ]
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "update_policy",
+      "discriminator": [
+        212,
+        245,
+        246,
+        7,
+        163,
+        151,
+        18,
+        57
+      ],
+      "accounts": [
+        {
+          "name": "guard",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "guard.owner",
+                "account": "GuardConfig"
+              },
+              {
+                "kind": "account",
+                "path": "guard.obligation",
+                "account": "GuardConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "owner",
+          "signer": true,
+          "relations": [
+            "guard"
+          ]
+        },
+        {
+          "name": "obligation"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "UpdatePolicyArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "withdraw_reserve",
+      "discriminator": [
+        165,
+        158,
+        228,
+        5,
+        114,
+        119,
+        194,
+        14
+      ],
+      "accounts": [
+        {
+          "name": "guard",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "guard.owner",
+                "account": "GuardConfig"
+              },
+              {
+                "kind": "account",
+                "path": "guard.obligation",
+                "account": "GuardConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "guard"
+          ]
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "guard"
+              }
+            ]
+          },
+          "relations": [
+            "guard"
+          ]
+        },
+        {
+          "name": "owner_destination",
+          "writable": true
+        },
+        {
+          "name": "vault_mint",
+          "relations": [
+            "guard"
+          ]
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "GuardConfig",
+      "discriminator": [
+        95,
+        175,
+        118,
+        50,
+        193,
+        113,
+        37,
+        250
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "ActionExecuted",
+      "discriminator": [
+        116,
+        101,
+        146,
+        36,
+        160,
+        153,
+        182,
+        233
+      ]
+    },
+    {
+      "name": "GuardInitialized",
+      "discriminator": [
+        96,
+        193,
+        193,
+        62,
+        210,
+        16,
+        25,
+        100
+      ]
+    },
+    {
+      "name": "GuardRevoked",
+      "discriminator": [
+        118,
+        46,
+        189,
+        85,
+        50,
+        61,
+        236,
+        189
+      ]
+    },
+    {
+      "name": "PolicyUpdated",
+      "discriminator": [
+        225,
+        112,
+        112,
+        67,
+        95,
+        236,
+        245,
+        161
+      ]
+    },
+    {
+      "name": "ReserveDeposited",
+      "discriminator": [
+        97,
+        31,
+        143,
+        158,
+        209,
+        4,
+        254,
+        91
+      ]
+    },
+    {
+      "name": "ReserveWithdrawn",
+      "discriminator": [
+        186,
+        11,
+        109,
+        7,
+        117,
+        246,
+        188,
+        249
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "UnauthorizedAgent",
+      "msg": "Agent key does not match guard config"
+    },
+    {
+      "code": 6001,
+      "name": "GuardPaused",
+      "msg": "Guard is paused"
+    },
+    {
+      "code": 6002,
+      "name": "GuardExpired",
+      "msg": "Delegation expired"
+    },
+    {
+      "code": 6003,
+      "name": "CooldownActive",
+      "msg": "Cooldown has not elapsed"
+    },
+    {
+      "code": 6004,
+      "name": "RateLimitExceeded",
+      "msg": "Action limit for the current window is exhausted"
+    },
+    {
+      "code": 6005,
+      "name": "ActionNotAllowed",
+      "msg": "Action kind is not permitted by policy"
+    },
+    {
+      "code": 6006,
+      "name": "AmountExceedsLimit",
+      "msg": "Amount exceeds per-action limit or vault balance"
+    },
+    {
+      "code": 6007,
+      "name": "StaleObligation",
+      "msg": "Obligation state was not refreshed in the current slot"
+    },
+    {
+      "code": 6008,
+      "name": "StaleOracle",
+      "msg": "Oracle price is stale or confidence is too wide"
+    },
+    {
+      "code": 6009,
+      "name": "TriggerNotMet",
+      "msg": "Current LTV is below the configured trigger"
+    },
+    {
+      "code": 6010,
+      "name": "ActionWouldNotImprove",
+      "msg": "Action would not improve position health"
+    },
+    {
+      "code": 6011,
+      "name": "Overcorrection",
+      "msg": "Amount overshoots the configured target LTV"
+    },
+    {
+      "code": 6012,
+      "name": "InvalidPolicy",
+      "msg": "Policy parameters are inconsistent"
+    },
+    {
+      "code": 6013,
+      "name": "MathOverflow",
+      "msg": "Arithmetic overflow"
+    },
+    {
+      "code": 6014,
+      "name": "UnexpectedProgram",
+      "msg": "Unexpected lending program"
+    },
+    {
+      "code": 6015,
+      "name": "InvalidExternalAccount",
+      "msg": "External Kamino account owner, discriminator, or layout is invalid"
+    },
+    {
+      "code": 6016,
+      "name": "InvalidMarketRelationship",
+      "msg": "Kamino account relationships do not match guard config"
+    },
+    {
+      "code": 6017,
+      "name": "MissingDebtPosition",
+      "msg": "Configured debt reserve is not present in the obligation"
+    },
+    {
+      "code": 6018,
+      "name": "InvalidRemainingAccounts",
+      "msg": "Remaining deposit reserve accounts are missing, reordered, or invalid"
+    },
+    {
+      "code": 6019,
+      "name": "InvalidAmount",
+      "msg": "Amount must be greater than zero"
+    },
+    {
+      "code": 6020,
+      "name": "ClockMovedBackwards",
+      "msg": "Clock moved backwards relative to guard state"
+    },
+    {
+      "code": 6021,
+      "name": "PostCpiInvariant",
+      "msg": "Post-CPI balance or health invariant failed"
+    }
+  ],
+  "types": [
+    {
+      "name": "ActionExecuted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "guard",
+            "type": "pubkey"
+          },
+          {
+            "name": "agent",
+            "type": "pubkey"
+          },
+          {
+            "name": "obligation",
+            "type": "pubkey"
+          },
+          {
+            "name": "requested_amount",
+            "type": "u64"
+          },
+          {
+            "name": "repaid_amount",
+            "type": "u64"
+          },
+          {
+            "name": "ltv_before_bps",
+            "type": "u16"
+          },
+          {
+            "name": "ltv_after_bps",
+            "type": "u16"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GuardConfig",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "agent",
+            "type": "pubkey"
+          },
+          {
+            "name": "obligation",
+            "type": "pubkey"
+          },
+          {
+            "name": "lending_market",
+            "type": "pubkey"
+          },
+          {
+            "name": "debt_reserve",
+            "type": "pubkey"
+          },
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "vault_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "trigger_ltv_bps",
+            "type": "u16"
+          },
+          {
+            "name": "target_ltv_bps",
+            "type": "u16"
+          },
+          {
+            "name": "max_action_amount",
+            "type": "u64"
+          },
+          {
+            "name": "max_actions_per_window",
+            "type": "u8"
+          },
+          {
+            "name": "window_seconds",
+            "type": "u32"
+          },
+          {
+            "name": "cooldown_seconds",
+            "type": "u32"
+          },
+          {
+            "name": "allowed_actions",
+            "type": "u8"
+          },
+          {
+            "name": "expires_at",
+            "type": "i64"
+          },
+          {
+            "name": "paused",
+            "type": "bool"
+          },
+          {
+            "name": "last_action_at",
+            "type": "i64"
+          },
+          {
+            "name": "window_started_at",
+            "type": "i64"
+          },
+          {
+            "name": "actions_in_window",
+            "type": "u8"
+          },
+          {
+            "name": "total_actions",
+            "type": "u32"
+          },
+          {
+            "name": "total_repaid",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "vault_bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GuardInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "guard",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "agent",
+            "type": "pubkey"
+          },
+          {
+            "name": "obligation",
+            "type": "pubkey"
+          },
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "expires_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GuardRevoked",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "guard",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "revoked_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "InitGuardArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "agent",
+            "type": "pubkey"
+          },
+          {
+            "name": "policy",
+            "type": {
+              "defined": {
+                "name": "PolicyParams"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "PolicyParams",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "trigger_ltv_bps",
+            "type": "u16"
+          },
+          {
+            "name": "target_ltv_bps",
+            "type": "u16"
+          },
+          {
+            "name": "max_action_amount",
+            "type": "u64"
+          },
+          {
+            "name": "max_actions_per_window",
+            "type": "u8"
+          },
+          {
+            "name": "window_seconds",
+            "type": "u32"
+          },
+          {
+            "name": "cooldown_seconds",
+            "type": "u32"
+          },
+          {
+            "name": "allowed_actions",
+            "type": "u8"
+          },
+          {
+            "name": "expires_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PolicyUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "guard",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "agent",
+            "type": "pubkey"
+          },
+          {
+            "name": "trigger_ltv_bps",
+            "type": "u16"
+          },
+          {
+            "name": "target_ltv_bps",
+            "type": "u16"
+          },
+          {
+            "name": "expires_at",
+            "type": "i64"
+          },
+          {
+            "name": "paused",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ReserveDeposited",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "guard",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ReserveWithdrawn",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "guard",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UpdatePolicyArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "agent",
+            "type": "pubkey"
+          },
+          {
+            "name": "policy",
+            "type": {
+              "defined": {
+                "name": "PolicyParams"
+              }
+            }
+          },
+          {
+            "name": "paused",
+            "type": "bool"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+/target
+/tests/litesvm-harness/target
+/tests/mock-klend/target
+/.anchor
+/.surfpool
+/.idea
+/.vscode
+*.log
+
+# Deployment keypairs are private material and must never be committed.
+*-keypair.json
+tests/litesvm-harness/fixtures/klend.so

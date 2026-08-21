@@ -1,0 +1,10 @@
+# The SBF toolchain pinned by Anchor.toml (Solana 2.1.7) ships Cargo 1.79, which
+# cannot even parse a manifest declaring Edition 2024. A plain `cargo update` on a
+# modern host silently pulls such crates in transitively and breaks `cargo build-sbf`
+# with an error that names a crate nobody added on purpose.
+#
+# `fallback` makes resolution honour the `rust-version = "1.79"` declared in the
+# workspace, so dependency selection stays inside what the SBF toolchain can build.
+# Cargo 1.79 itself ignores this key, so it does not interfere with the SBF build.
+[resolver]
+incompatible-rust-versions = "fallback"
