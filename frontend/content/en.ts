@@ -216,6 +216,36 @@ export const en = {
     ],
   },
 
+  founders: {
+    heading: "Founders",
+    badge: "Core Team",
+    lead: "Meet the core builders behind Brace autonomous liquidation defense.",
+    githubLabel: "GitHub profile of",
+    telegramLabel: "Telegram of",
+    members: [
+      {
+        name: "Miroslav",
+        handle: "@miroslawvwv",
+        role: "CEO & Product Architect",
+        avatar: "https://github.com/gEomX12.png",
+        bio: "Driving Brace product vision, high-density Web3 UX, and Kamino ecosystem integrations.",
+        stack: ["Product UX", "Next.js", "DeFi Strategy", "Solana"],
+        github: "https://github.com/gEomX12",
+        telegram: "https://t.me/miroslawvwv",
+      },
+      {
+        name: "Pavel",
+        handle: "@Mirceya",
+        role: "CTO & Lead Protocol Engineer",
+        avatar: "https://github.com/Pavlentiyys.png",
+        bio: "Architecting low-latency Solana programs, autonomous keeper infrastructure, and MEV-safe liquidation defense.",
+        stack: ["Rust / Anchor", "Solana Core", "Keeper Infra", "Risk Engine"],
+        github: "https://github.com/Pavlentiyys",
+        telegram: "https://t.me/Mirceya",
+      },
+    ],
+  },
+
   footer: {
     app: "App",
     docs: "Documentation",

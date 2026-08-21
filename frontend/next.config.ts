@@ -6,6 +6,15 @@ const nextConfig: NextConfig = {
   // it (LANDING.md section 5). A separate docs platform is more machinery than
   // this stage needs.
   pageExtensions: ["ts", "tsx", "md", "mdx"],
+
+  // Founder avatars are served by GitHub. `github.com/<user>.png` redirects to
+  // the avatars host, so both are listed.
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "github.com", pathname: "/*.png" },
+      { protocol: "https", hostname: "avatars.githubusercontent.com" },
+    ],
+  },
 };
 
 const withMDX = createMDX({});

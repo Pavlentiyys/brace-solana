@@ -1,4 +1,5 @@
 import { Capabilities } from "@/components/landing/capabilities";
+import { Founders } from "@/components/landing/founders";
 import { Hero } from "@/components/landing/hero";
 import { Limits } from "@/components/landing/limits";
 import { Pricing } from "@/components/landing/pricing";
@@ -13,6 +14,9 @@ import { Timeline } from "@/components/landing/timeline";
  *
  * The first answer is in the hero, above the fold, because until that one is
  * settled nothing else is interesting.
+ *
+ * Founders come last, immediately before the footer, because "who is behind
+ * this" is a question the reader only reaches after the other five.
  */
 export default function Home() {
   return (
@@ -24,6 +28,7 @@ export default function Home() {
       <Limits />
       <Pricing />
       <Start />
+      <Founders />
     </>
   );
 }
