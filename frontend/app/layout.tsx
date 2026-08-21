@@ -1,8 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
-import { SiteFooter } from "@/components/site/site-footer";
-import { SiteHeader } from "@/components/site/site-header";
 import { en } from "@/content/en";
 import { site } from "@/content/site";
 import "./globals.css";
@@ -45,10 +43,20 @@ export const viewport: Viewport = {
   colorScheme: "dark",
 };
 
+/**
+ * Everything shared by both halves of the site and nothing else.
+ *
+ * The marketing pages and the app section carry different chrome, so the header and
+ * the footer belong to their own layouts rather than to this one. A panel somebody
+ * checks on a phone during a fall does not need a footer of links under it.
+ */
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
+      // The landing page anchors scroll smoothly; route transitions should not.
+      // Without this Next warns and jumps between routes animate.
+      data-scroll-behavior="smooth"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="grain flex min-h-full flex-col">
@@ -59,11 +67,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           {en.nav.skipToContent}
         </a>
 
-        <SiteHeader />
-        <main id="main" className="flex-1">
-          {children}
-        </main>
-        <SiteFooter />
+        {children}
       </body>
     </html>
   );

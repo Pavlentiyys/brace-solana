@@ -16,10 +16,8 @@
 
 export const en = {
   nav: {
-    simulator: "Simulator",
-    limits: "Limits",
-    price: "Price",
     docs: "Docs",
+    app: "App",
     skipToContent: "Skip to content",
     openMenu: "Open menu",
     closeMenu: "Close menu",
@@ -196,6 +194,9 @@ export const en = {
 
   start: {
     heading: "Getting started",
+    cta: "Open the app",
+    ctaNote:
+      "The app is the third step. It runs against a demo world until the program is deployed, and it says so on every screen.",
     steps: [
       {
         title: "Connect a read only address",
@@ -216,6 +217,7 @@ export const en = {
   },
 
   footer: {
+    app: "App",
     docs: "Documentation",
     exit: "How to take everything and leave",
     program: "Program",
@@ -226,6 +228,277 @@ export const en = {
     notYet: "not published yet",
     disclaimer:
       "Brace executes a rule you set. It does not predict prices and it does not guarantee that your position survives. Read the limits above before you use it.",
+  },
+
+  /**
+   * The signed-in app (PLATFORM.md section 2). The bot owns conversation; these
+   * screens own the four operations that need a wallet, plus the panel.
+   *
+   * Same tone rules as the landing. One extra rule applies here because these
+   * screens are read while somebody is deciding whether to hand over authority:
+   * nothing claims the position is safe. The panel reports; the user concludes.
+   */
+  app: {
+    nav: {
+      panel: "Position",
+      reserve: "Reserve",
+      history: "History",
+      authorize: "Authorization",
+    },
+    demoBanner: {
+      title: "This is a demo",
+      notConfigured:
+        "The program is not deployed, so this app runs against a world in your browser. The price moves, the rule fires, the reserve goes down. Nothing here touches a chain and no receipt has a transaction to link to.",
+      programNotDeployed:
+        "An RPC endpoint is configured, but the program id is still the placeholder in the source, so there is nothing to read. Until the program is deployed the app runs against a world in your browser.",
+      reset: "Reset the demo",
+    },
+    connect: {
+      heading: "Connect a wallet",
+      body: "The web app exists for the four things that need a signature: authorization, funding the reserve, withdrawing it, and revoking. Everything else lives in the chat.",
+      unavailable:
+        "No Solana wallet is installed in this browser. Install one, then reload this page.",
+      connecting: "Waiting for the wallet",
+      disconnect: "Disconnect",
+      readOnlyNote:
+        "Connecting reads your public address. It does not authorize anything and does not move anything.",
+    },
+    discovery: {
+      heading: "Your borrows",
+      searching: "Looking for borrows in the supported markets",
+      noneHeading: "No borrows found for this address",
+      noneBody:
+        "The agent works on an existing borrow, so there has to be one before there is anything to guard. Open a position in a supported market first, then come back.",
+      noneLink: "Kamino",
+      unsupportedLabel: "Not supported",
+      unsupportedHeading: "Found, but the agent cannot act on it",
+      supportedLabel: "Supported",
+      guarded: "Authorized",
+      notGuarded: "No authorization yet",
+      open: "Open",
+      authorize: "Grant authorization",
+    },
+    panel: {
+      title: "Position",
+      ltvLabel: "Current LTV",
+      toTrigger: "to your rule",
+      toLiquidation: "to liquidation",
+      pastTrigger: "past your rule",
+      pastLiquidation: "past liquidation",
+      triggerAt: "Your rule fires at",
+      liquidationAt: "Liquidation at",
+      priceNow: "SOL price",
+      liveness: {
+        label: "Last check",
+        fresh: "The watcher is reading your position.",
+        lagging: "The watcher is behind. It has not reported for longer than a normal cycle.",
+        stalled:
+          "The watcher has not reported for over a minute. Treat this position as unwatched until it comes back.",
+        unknown: "The watcher has not reported at all yet.",
+      },
+      agent: {
+        label: "Agent",
+        armed: "Would act now",
+        watching: "Watching",
+        wouldNotAct: "Would not act",
+        blockers: {
+          revoked: "Authorization revoked",
+          expired: "Authorization expired",
+          paused: "Paused by you",
+          below_trigger: "LTV is below your trigger",
+          rate_limited: "The action limit for this window is used up",
+          cooling_down: "Cooling down after the last action",
+          reserve_empty: "The reserve is empty",
+        },
+      },
+      reserve: {
+        label: "Reserve",
+        firings: "firings left at the current rule",
+        firingsOne: "firing left at the current rule",
+        empty: "Empty. The agent cannot act until you fund it.",
+        manage: "Fund or withdraw",
+      },
+      authority: {
+        label: "Authorization",
+        expiresOn: "Ends on",
+        left: "left",
+        expired: "This authorization has ended. The agent cannot act.",
+        revoked: "You revoked this authorization. The agent cannot act.",
+        paused: "You paused the agent. It will not act until you resume.",
+        nearExpiry: "This authorization ends within a week. The agent stops acting when it does.",
+        window: "Actions this window",
+        windowResets: "resets",
+        cooldown: "Cooldown",
+        ready: "ready",
+      },
+      rule: {
+        label: "Your rule",
+        sentence:
+          "When LTV reaches {trigger}, repay from the reserve until LTV is back to {target}, at most {cap} in one action and at most {count} times per {window}.",
+        changeInChat: "Change this in the chat",
+        changeNote: "Rules are set in conversation, not in a form. The web app only shows what is set.",
+      },
+      controls: {
+        pause: "Pause the agent",
+        resume: "Resume the agent",
+        withdraw: "Withdraw the reserve",
+        revoke: "Revoke authorization",
+        revokeNote:
+          "One click, no confirmation step. Withdrawing the reserve is not blocked by revoking, expiry or a pause.",
+      },
+      noGuardHeading: "No authorization for this position",
+      noGuardBody:
+        "The agent is reading this position and can do nothing to it. Granting authorization is the step that changes that, and it is reversible in one click.",
+    },
+    authorize: {
+      title: "Authorization",
+      heading: "What you are about to allow",
+      lead: "This is the only thing the chat cannot do for you. Read the two lists before you sign; they are generated from the program, not written by hand.",
+      canHeading: "The agent will be able to",
+      cannotHeading: "The agent will not be able to",
+      can: {
+        repay: "Repay part of your debt from your reserve",
+        top_up: "Add collateral from your reserve",
+      },
+      cannot: [
+        "Send funds to any other address",
+        "Touch anything except your reserve and this position",
+        "Act while LTV is below your trigger",
+        "Act more often than your limits allow",
+        "Act after you revoke, or after the end date below",
+        "Stop you withdrawing the reserve at any time",
+      ],
+      verifyHeading: "Check this rather than believe it",
+      verifyBody:
+        "The program exposes six instructions. None of them transfers to an address you did not set. That is why the agent cannot do it, rather than a promise not to.",
+      instructionsLabel: "Instructions in the program",
+      notDeployed:
+        "The program is not deployed yet, so there is no explorer link and nothing to sign. This screen shows what authorization will ask for.",
+      limitsHeading: "The limits you are setting",
+      trigger: "Fires at",
+      target: "Restores to",
+      cap: "Most in one action",
+      rate: "Most actions",
+      cooldown: "Minimum gap between actions",
+      expiry: "Ends on",
+      expiryNote:
+        "A date rather than a duration, because a date is something you can check against a calendar.",
+      programCeiling: "The program refuses any authorization longer than ninety days.",
+      submit: "Grant authorization",
+      submitting: "Waiting for the wallet",
+      done: "Authorization granted.",
+      ruleFromChat: "These values come from the rule you set in the chat.",
+      ruleFallback:
+        "No rule has arrived from the chat, so these are starting values. Set your rule in the chat first if you want different ones.",
+    },
+    reserve: {
+      title: "Reserve",
+      heading: "The money the agent is allowed to spend",
+      lead: "It stays yours. Withdrawing is not blocked by a paused agent, an expired authorization or a revoked one, and that is a property of the program rather than a policy of ours.",
+      balance: "In the reserve",
+      walletBalance: "In your wallet",
+      depositHeading: "Add to the reserve",
+      withdrawHeading: "Take it back",
+      amount: "Amount",
+      max: "Max",
+      deposit: "Fund the reserve",
+      withdraw: "Withdraw",
+      withdrawAll: "Withdraw everything",
+      sizingHeading: "How far this goes",
+      oneAction: "One firing of your rule costs",
+      oneActionNote:
+        "Measured at your trigger, not at today's price, because that is where the agent acts.",
+      coverageHeading: "What it takes to hold this position through a fall",
+      coverageDrop: "Price falls",
+      coverageLtv: "LTV reaches",
+      coverageNeeded: "Repay needed",
+      coverageStatus: "Your reserve",
+      covered: "covers it",
+      notCovered: "short by",
+      noFire: "rule does not fire",
+      beyondRule: "more than your rule can spend in one window, which is",
+      passesLiquidation:
+        "A fall this deep goes past the liquidation threshold. The agent acts on the way down, so whether it gets there first depends on how fast the price moves.",
+      depth: "Your rule and your reserve hold this position through a fall of about",
+      depthAll: "Nothing this model reaches breaks through your rule and your reserve.",
+      depthNone: "Your reserve does not cover the first firing of your rule.",
+      emptyNote: "The reserve is empty, so the agent cannot act however far the price falls.",
+    },
+    history: {
+      title: "History",
+      heading: "Every action and every attempt",
+      lead: "Including the ones that failed. An attempt that did not land is the case that matters most, so it is in the list rather than in a log somewhere.",
+      empty: "Nothing has happened to this guard yet.",
+      viewTransaction: "Transaction",
+      noTransaction: "no transaction, this is demo data",
+      failedLabel: "Failed",
+      failedLead: "The watcher tried and the transaction did not go through.",
+      onChainError: "The chain reported",
+    },
+    failure: {
+      heading: "Something did not work",
+      retry: "Try again",
+      wallet_unavailable: {
+        title: "No wallet in this browser",
+        body: "Install a Solana wallet and reload the page.",
+      },
+      wallet_rejected: {
+        title: "You dismissed the wallet prompt",
+        body: "Nothing was sent and nothing changed. Try again when you are ready.",
+      },
+      insufficient_funds: {
+        title: "Not enough to cover that",
+        body: "The amount is above the balance available for it.",
+      },
+      rpc_unavailable: {
+        title: "Cannot reach the network",
+        body: "The numbers below are the last ones that arrived and they are not being updated. Nothing has happened to your position because of this, but this app cannot see it right now.",
+      },
+      price_stale: {
+        title: "The price behind these numbers is old",
+        body: "Every reading on this screen is derived from it, so treat them as approximate until it updates.",
+      },
+      congested: {
+        title: "The network did not accept the transaction",
+        body: "Solana was busy enough to drop it. Sending it again with a higher priority fee usually works.",
+      },
+      authorization_expired: {
+        title: "The authorization ended while you were on this page",
+        body: "The agent has stopped acting. Your reserve is still yours and withdrawing it still works.",
+      },
+      program_not_deployed: {
+        title: "The program is not deployed",
+        body: "There is nothing to sign against yet. This screen shows what the operation will ask for.",
+      },
+      invalid_policy: {
+        title: "The program would reject this rule",
+        body: "It was checked here rather than on chain, so this cost you nothing.",
+      },
+      unknown: {
+        title: "Unexpected failure",
+        body: "This is the message the app got back.",
+      },
+    },
+    demoControls: {
+      heading: "Demo controls",
+      body: "The failure paths are the ones a demo never shows. These switch them on so they can be read on the screen rather than taken on trust.",
+      price: "Move the price",
+      down10: "Down 10%",
+      down25: "Down 25%",
+      up10: "Up 10%",
+      faults: "Faults",
+      fault: {
+        rpc_unavailable: "Network unreachable",
+        watcher_stalled: "Watcher stopped",
+        price_stale: "Price stops updating",
+        action_fails: "Actions fail on chain",
+        congested: "Network drops transactions",
+        wallet_rejects: "Wallet rejects everything",
+      },
+      expiry: "Authorization",
+      expireSoon: "Ends in 3 days",
+      expireNow: "End it now",
+    },
   },
 
   docs: {

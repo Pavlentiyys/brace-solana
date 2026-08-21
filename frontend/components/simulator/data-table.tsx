@@ -1,5 +1,5 @@
-import { elapsed, percentFromBps } from "@/lib/format";
-import type { SimulationResult } from "@/lib/ltv/simulate";
+import { elapsed, percentFromBps } from "@/lib/core/format";
+import type { SimulationResult } from "@/lib/core/ltv/simulate";
 
 /**
  * The chart's values as a table.

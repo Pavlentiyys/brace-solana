@@ -12,8 +12,8 @@
  * quoting them wrongly.
  */
 
-import type { Position } from "@/lib/ltv/calc";
-import type { MarketParams, Rule } from "@/lib/ltv/simulate";
+import type { Position } from "@/lib/core/ltv/calc";
+import type { MarketParams, Rule } from "@/lib/core/ltv/simulate";
 
 /** 40 SOL of collateral against 3,700 USDC of debt, liquidated at 80% LTV. */
 export const DEMO_POSITION: Position = {

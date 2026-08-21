@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 
-import { percentFromBps } from "@/lib/format";
-import type { SimulationResult } from "@/lib/ltv/simulate";
+import { percentFromBps } from "@/lib/core/format";
+import type { SimulationResult } from "@/lib/core/ltv/simulate";
 import { cn } from "@/lib/cn";
 import { en } from "@/content/en";
 

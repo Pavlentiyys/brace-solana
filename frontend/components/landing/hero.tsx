@@ -1,8 +1,8 @@
 import { ButtonLink } from "@/components/ui/button";
 import { Container } from "@/components/ui/section";
 import { en } from "@/content/en";
-import { money, percentFromBps, tokens } from "@/lib/format";
-import { liquidationPrice, ltvBps } from "@/lib/ltv/calc";
+import { money, percentFromBps, tokens } from "@/lib/core/format";
+import { liquidationPrice, ltvBps } from "@/lib/core/ltv/calc";
 import { DEMO_POSITION, DEMO_RULE, SCENARIOS } from "@/lib/scenarios";
 
 /**

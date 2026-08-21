@@ -12,17 +12,12 @@ import { en } from "@/content/en";
  * under a different label, which is the fastest way to make a trust-first page
  * read like a funnel.
  *
- * Four short links fit on one line at 375px, so there is no hamburger and no
- * client component behind this.
+ * So the app is a destination link styled exactly like the docs link, not a
+ * button. It is here because the docs pages otherwise have no way into the app
+ * except the footer. In-page anchors were removed so the header never competes
+ * with the page's own scroll order.
  */
 export function SiteHeader() {
-  const links = [
-    { href: "/#simulator", label: en.nav.simulator },
-    { href: "/#limits", label: en.nav.limits },
-    { href: "/#price", label: en.nav.price },
-    { href: "/docs", label: en.nav.docs },
-  ];
-
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-canvas/80 backdrop-blur-md">
       <Container>
@@ -34,19 +29,19 @@ export function SiteHeader() {
             <Wordmark className="flex items-center gap-2" />
           </Link>
 
-          <nav aria-label="Main">
-            <ul className="flex items-center gap-4 text-[13px] text-ink-dim sm:gap-6">
-              {links.map((link) => (
-                <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    className="rounded-panel transition-colors duration-300 hover:text-ink"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
+          <nav aria-label="Main" className="flex items-center gap-6">
+            <Link
+              href="/docs"
+              className="rounded-panel text-[13px] text-ink-dim transition-colors duration-300 hover:text-ink"
+            >
+              {en.nav.docs}
+            </Link>
+            <Link
+              href="/app"
+              className="rounded-panel text-[13px] text-ink-dim transition-colors duration-300 hover:text-ink"
+            >
+              {en.nav.app}
+            </Link>
           </nav>
         </div>
       </Container>

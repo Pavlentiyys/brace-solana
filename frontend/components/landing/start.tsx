@@ -1,3 +1,4 @@
+import { ButtonLink } from "@/components/ui/button";
 import { Reveal } from "@/components/ui/reveal";
 import { Section, SectionHeading } from "@/components/ui/section";
 import { en } from "@/content/en";
@@ -45,6 +46,15 @@ export function Start() {
           </Reveal>
         ))}
       </ol>
+
+      <Reveal>
+        <div className="mt-10 flex flex-wrap items-center gap-5 border-t border-line pt-8">
+          <ButtonLink href="/app">{en.start.cta}</ButtonLink>
+          <p className="max-w-[52ch] text-[12px] leading-relaxed text-ink-faint">
+            {en.start.ctaNote}
+          </p>
+        </div>
+      </Reveal>
     </Section>
   );
 }

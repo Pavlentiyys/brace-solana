@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { simulate, type SimulationResult } from "../ltv/simulate";
+import { simulate, type SimulationResult } from "../core/ltv/simulate";
 import {
   DEMO_MARKET,
   DEMO_POSITION,

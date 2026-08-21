@@ -20,7 +20,7 @@ import { ltvBpsFromValues, repayValueForTarget } from "./calc";
  */
 const VECTORS_PATH = join(
   dirname(fileURLToPath(import.meta.url)),
-  "../../../program/vectors/ltv-bps.json",
+  "../../../../program/vectors/ltv-bps.json",
 );
 
 interface LtvCase {

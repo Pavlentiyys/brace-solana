@@ -1,8 +1,8 @@
 import { Reveal } from "@/components/ui/reveal";
 import { Section, SectionHeading, SectionLead } from "@/components/ui/section";
 import { en } from "@/content/en";
-import { money } from "@/lib/format";
-import { simulate } from "@/lib/ltv/simulate";
+import { money } from "@/lib/core/format";
+import { simulate } from "@/lib/core/ltv/simulate";
 import {
   DEMO_MARKET,
   DEMO_POSITION,

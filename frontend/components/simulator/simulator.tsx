@@ -7,9 +7,9 @@ import { Outcome } from "@/components/simulator/outcome";
 import { SimulatorChart } from "@/components/simulator/simulator-chart";
 import { en } from "@/content/en";
 import { cn } from "@/lib/cn";
-import { money, percentFromBps } from "@/lib/format";
-import { liquidationPrice, ltvBps, type Position } from "@/lib/ltv/calc";
-import { simulate } from "@/lib/ltv/simulate";
+import { money, percentFromBps } from "@/lib/core/format";
+import { liquidationPrice, ltvBps, type Position } from "@/lib/core/ltv/calc";
+import { simulate } from "@/lib/core/ltv/simulate";
 import {
   DEFAULT_SCENARIO_ID,
   DEMO_MARKET,

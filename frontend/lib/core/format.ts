@@ -3,7 +3,7 @@
  * the same value never appears as "62%" in one place and "62.00%" in another.
  */
 
-import { BPS } from "@/lib/ltv/calc";
+import { BPS } from "@/lib/core/ltv/calc";
 
 const usd = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -52,6 +52,36 @@ export function percentFromBps(bps: number): string {
 
 export function tokens(value: number, symbol = "SOL"): string {
   return `${value.toLocaleString("en-US", { maximumFractionDigits: 2 })} ${symbol}`;
+}
+
+const dayMonthYear = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+});
+
+const dayMonthTime = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+/**
+ * "19 November 2026", from unix seconds.
+ *
+ * PLATFORM.md 2.3 requires the end of an authorization to be shown as a date rather
+ * than a duration, so this is the format that carries it. In the reader's own
+ * timezone: a date they cannot compare against their own calendar is not the point.
+ */
+export function calendarDate(unixSeconds: number): string {
+  return dayMonthYear.format(unixSeconds * 1_000);
+}
+
+/** "19 Nov 2026, 14:03". For receipts, where the time of day matters. */
+export function calendarDateTime(unixSeconds: number): string {
+  return dayMonthTime.format(unixSeconds * 1_000);
 }
 
 /** Point index to elapsed time, for the simulator's time axis. */

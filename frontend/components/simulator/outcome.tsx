@@ -1,7 +1,7 @@
 import { en } from "@/content/en";
 import { cn } from "@/lib/cn";
-import { money, moneyPrecise, moneySigned, moneyWhole } from "@/lib/format";
-import type { Branch, SimulationResult } from "@/lib/ltv/simulate";
+import { money, moneyPrecise, moneySigned, moneyWhole } from "@/lib/core/format";
+import type { Branch, SimulationResult } from "@/lib/core/ltv/simulate";
 
 /**
  * The two numbers LANDING.md asks for, side by side, plus the three that
