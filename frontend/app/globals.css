@@ -1,0 +1,134 @@
+@import "tailwindcss";
+
+/*
+ * Brace design tokens.
+ *
+ * One accent, one radius, one theme. The three locks below are deliberate and
+ * a component that breaks any of them is a bug, not a variation.
+ *
+ * COLOUR LOCK. `accent` is the only brand colour. It carries every interactive
+ * element: buttons, links, focus rings. The `state-*` colours are NOT accents.
+ * They mean something specific inside data (a rule threshold, a liquidation
+ * threshold, a healthy reading) and they never appear on a button, a border or
+ * a decoration. If a state colour shows up outside a chart or a status
+ * readout, the page has drifted.
+ *
+ * RADIUS LOCK. Everything is 6px. No pills. A pill button reads as a consumer
+ * app, and this is an instrument panel for people deciding about money.
+ *
+ * THEME LOCK. Dark only, declared rather than inferred, so no section can flip
+ * to a light background halfway down the page. There is no light palette to
+ * fall back to and that is on purpose. Adding one is a separate job.
+ */
+@theme {
+  --color-canvas: #08090b;
+  --color-surface: #0e1013;
+  --color-raised: #14171b;
+
+  --color-line: rgb(255 255 255 / 0.08);
+  --color-line-strong: rgb(255 255 255 / 0.16);
+
+  /*
+   * Contrast against `canvas`: 16.5:1, 7.6:1, 4.7:1. All three clear WCAG AA
+   * for body text, which `ink-faint` did not at its first value of #5a6068
+   * (3.1:1). It carries form labels, captions and axis ticks, so "it is only
+   * small print" was exactly the wrong reason to leave it dim.
+   *
+   * `ink-faint` is never placed on `raised`, where it would fall to 4.3:1.
+   */
+  --color-ink: #e8eaed;
+  --color-ink-dim: #9aa0a9;
+  --color-ink-faint: #767c85;
+
+  --color-accent: #4b8fff;
+  --color-accent-deep: #2c6bd9;
+  --color-accent-wash: rgb(75 143 255 / 0.12);
+
+  /*
+   * Semantic only. See the colour lock above.
+   *
+   * All three sit inside the OKLCH L 0.48-0.67 band that reads correctly on a
+   * dark surface, checked with the dataviz palette validator rather than by
+   * eye. The chart itself only ever draws `accent` and `state-danger`
+   * together, and that pair separates by dE 26.5 under protanopia.
+   *
+   * `state-ok` and `state-danger` DO collide under deuteranopia (dE 4.6), so
+   * they are never used as the sole difference between two things. They only
+   * ever tint a word that already says "Liquidated" or "Not liquidated".
+   */
+  --color-state-warn: #c0851f;
+  --color-state-danger: #e5484d;
+  --color-state-ok: #26a469;
+
+  --radius-panel: 6px;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html {
+  scroll-behavior: smooth;
+  /* Anchored sections should not land under the sticky header. */
+  scroll-padding-top: 5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+body {
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/*
+ * Every number on this site is monospaced and tabular, so a value that ticks
+ * from 71.59% to 62.00% does not shift the layout around it.
+ */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+::selection {
+  background-color: var(--color-accent);
+  color: #05070c;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/*
+ * Fixed, so the GPU composites it once instead of repainting it on every
+ * scroll frame. Never attach this to a scrolling container.
+ */
+.grain::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/*
+ * Recharts writes its own focus outline onto the SVG wrapper on every mouse
+ * move, which flashes a rectangle around the chart. Keyboard focus still gets
+ * the ring above.
+ */
+.recharts-wrapper:focus {
+  outline: none;
+}

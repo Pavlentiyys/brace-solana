@@ -1,0 +1,63 @@
+/**
+ * Display formatting. Every number the user reads passes through here so that
+ * the same value never appears as "62%" in one place and "62.00%" in another.
+ */
+
+import { BPS } from "@/lib/ltv/calc";
+
+const usd = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 2,
+});
+
+const usdWhole = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 0,
+});
+
+const usdPrecise = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 4,
+  maximumFractionDigits: 4,
+});
+
+export function money(value: number): string {
+  return usd.format(value);
+}
+
+export function moneyWhole(value: number): string {
+  return usdWhole.format(value);
+}
+
+/** For amounts under a cent, where `money` would round to $0.00. */
+export function moneyPrecise(value: number): string {
+  return value > 0 && value < 0.01 ? usdPrecise.format(value) : usd.format(value);
+}
+
+/** Signed, for differences. A leading plus makes the direction unmissable. */
+export function moneySigned(value: number): string {
+  const formatted = usd.format(Math.abs(value));
+  if (value > 0) return `+${formatted}`;
+  if (value < 0) return `-${formatted}`;
+  return formatted;
+}
+
+/** Basis points to a percentage string, always two decimals. */
+export function percentFromBps(bps: number): string {
+  return `${(bps / (BPS / 100)).toFixed(2)}%`;
+}
+
+export function tokens(value: number, symbol = "SOL"): string {
+  return `${value.toLocaleString("en-US", { maximumFractionDigits: 2 })} ${symbol}`;
+}
+
+/** Point index to elapsed time, for the simulator's time axis. */
+export function elapsed(index: number, stepMinutes: number): string {
+  const minutes = index * stepMinutes;
+  if (minutes < 60) return `${minutes}m`;
+  const hours = minutes / 60;
+  return Number.isInteger(hours) ? `${hours}h` : `${hours.toFixed(1)}h`;
+}

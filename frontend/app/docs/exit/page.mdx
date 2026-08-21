@@ -1,0 +1,53 @@
+export const metadata = {
+  title: "How to take everything and leave",
+  description:
+    "Revoke authorization, withdraw the reserve, unlink the bot, and how to get your money out if Brace stops running.",
+};
+
+# How to take everything and leave
+
+This page exists because you should be able to read it before you decide to start. Leaving takes three steps and none of them depends on our permission.
+
+## 1. Revoke authorization
+
+**In the web app:** open the position panel and use **Revoke authorization**. One click, no confirmation chain, no exit survey. The transaction removes the agent's permission to act on your position.
+
+**In the bot:** send `/revoke`. It runs immediately and does not ask you to confirm.
+
+After this the agent cannot add collateral or repay debt for you. Your position is untouched: the same collateral, the same debt, the same liquidation price it had a second earlier. What changes is that nothing acts on it automatically any more.
+
+## 2. Withdraw reserve
+
+Use **Withdraw reserve** in the web app. The reserve is your money held in an account you own, and this instruction is not gated on anything:
+
+- It works while the agent is paused.
+- It works after the authorization has expired.
+- It works after you have revoked authorization.
+- It works while your position is unhealthy.
+
+There is no state the program can be in where your reserve is stuck. If you find one, that is a bug and it is the most serious kind we can have.
+
+## 3. Unlink the bot
+
+Send `/unlink` to the bot. It stops watching your address and deletes the link between your chat and your wallet.
+
+This is separate from step 1 on purpose. Some people revoke authorization and keep the bot for read-only alerts, which is the whole of Stage 0.
+
+## If Brace is gone
+
+The three steps above go through our interfaces. They are convenient, not necessary. The reserve sits in a program account that you own, and the withdraw instruction checks your signature and nothing else, so you can call it directly with the Solana CLI and Anchor:
+
+```
+anchor idl fetch <PROGRAM_ID> --provider.cluster mainnet > brace.json
+# then call withdraw_reserve with your own keypair as the authority
+```
+
+**This command does not work yet.** The program has not been deployed, so there is no program ID to fetch an IDL from and no account to withdraw from. When it is deployed, this page gets the real program ID and a copy-pasteable command that has been run against mainnet.
+
+Publishing a placeholder here and calling it an escape hatch would be worse than admitting it is not ready. Until this section contains a command that works, treat the rest of the site as a description of what is being built.
+
+## What we keep
+
+If you unlink the bot we delete the association between your chat and your address. We do not hold your keys at any point, so there is nothing there to delete.
+
+Your on-chain history stays on chain. That is not ours to remove and nobody can remove it, including you.

@@ -1,0 +1,119 @@
+{
+  "$comment": [
+    "Shared LTV test vectors. PLATFORM.md section 4 requires the on-chain program,",
+    "the watcher, the web app and the bot to agree on these numbers.",
+    "",
+    "Only `ltvBps` is asserted exactly: it is an integer and it is the value every",
+    "threshold comparison runs on. The float fields are display values and are",
+    "asserted within a tolerance, because IEEE 754 division does not reproduce",
+    "bit-for-bit across Rust and JavaScript and pretending otherwise would make",
+    "this file fail for the wrong reason.",
+    "",
+    "Adding a case here is how the contract gets extended. Any implementation that",
+    "cannot reproduce a case is wrong, including this one."
+  ],
+  "tolerance": 1e-9,
+  "cases": [
+    {
+      "name": "healthy position, half the collateral borrowed",
+      "position": { "collateral": 10, "debt": 1000, "liquidationLtvBps": 8000 },
+      "price": 200,
+      "expect": {
+        "ltvBps": 5000,
+        "liquidationPrice": 125,
+        "dropToLiquidation": 0.375
+      }
+    },
+    {
+      "name": "same position after a 30 percent drop, repeating decimal rounds up",
+      "position": { "collateral": 10, "debt": 1000, "liquidationLtvBps": 8000 },
+      "price": 140,
+      "expect": {
+        "ltvBps": 7143,
+        "liquidationPrice": 125,
+        "dropToLiquidation": 0.10714285714285714
+      }
+    },
+    {
+      "name": "exact half basis point rounds away from zero, not to even",
+      "position": { "collateral": 100, "debt": 7000.5, "liquidationLtvBps": 8000 },
+      "price": 100,
+      "expect": {
+        "ltvBps": 7001,
+        "liquidationPrice": 87.50625,
+        "dropToLiquidation": 0.1249375
+      }
+    },
+    {
+      "name": "no debt is never liquidated at any price",
+      "position": { "collateral": 10, "debt": 0, "liquidationLtvBps": 8000 },
+      "price": 200,
+      "expect": {
+        "ltvBps": 0,
+        "liquidationPrice": 0,
+        "dropToLiquidation": 1
+      }
+    },
+    {
+      "name": "already past the liquidation threshold, no room left to fall",
+      "position": { "collateral": 10, "debt": 1700, "liquidationLtvBps": 8000 },
+      "price": 200,
+      "expect": {
+        "ltvBps": 8500,
+        "liquidationPrice": 212.5,
+        "dropToLiquidation": 0
+      }
+    },
+    {
+      "name": "debt with no collateral reads as maximum unhealthy, not as infinity",
+      "position": { "collateral": 0, "debt": 500, "liquidationLtvBps": 8000 },
+      "price": 200,
+      "expect": {
+        "ltvBps": 10000,
+        "dropToLiquidation": 0
+      }
+    },
+    {
+      "name": "underwater position reports a ratio above 100 percent rather than clamping",
+      "position": { "collateral": 1, "debt": 1000, "liquidationLtvBps": 8000 },
+      "price": 100,
+      "expect": {
+        "ltvBps": 100000,
+        "liquidationPrice": 1250,
+        "dropToLiquidation": 0
+      }
+    }
+  ],
+  "actionCases": [
+    {
+      "name": "bring a 71.43 percent position back to 60 percent",
+      "position": { "collateral": 10, "debt": 1000, "liquidationLtvBps": 8000 },
+      "price": 140,
+      "targetLtvBps": 6000,
+      "expect": {
+        "collateralToAdd": 1.904761904761905,
+        "debtToRepay": 160
+      }
+    },
+    {
+      "name": "a position already below target needs no action",
+      "position": { "collateral": 10, "debt": 1000, "liquidationLtvBps": 8000 },
+      "price": 200,
+      "targetLtvBps": 6000,
+      "expect": {
+        "collateralToAdd": 0,
+        "debtToRepay": 0
+      }
+    },
+    {
+      "name": "repayment is capped at the outstanding debt",
+      "position": { "collateral": 1, "debt": 1000, "liquidationLtvBps": 8000 },
+      "price": 100,
+      "targetLtvBps": 6000,
+      "expect": {
+        "collateralToAdd": 15.666666666666668,
+        "debtToRepay": 940
+      }
+    }
+  ]
+}
