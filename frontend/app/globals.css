@@ -62,8 +62,9 @@
 
   --radius-panel: 6px;
 
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+  --font-sans: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Consolas, monospace;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Consolas, monospace;
+  --font-brand: var(--font-sora), ui-sans-serif, system-ui, sans-serif;
 }
 
 :root {

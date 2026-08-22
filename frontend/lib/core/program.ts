@@ -13,15 +13,16 @@
  */
 
 /**
- * Not deployed. This is Anchor's placeholder id, still sitting in `declare_id!`.
+ * The deployed guard, on devnet.
  *
- * The interface checks this rather than hiding it: an explorer link to a program
- * that does not exist is worse than saying there is nothing to look at yet.
+ * Mirrors `declare_id!` in `programs/guard/src/lib.rs`. The interface reads this
+ * rather than hiding it: while it was Anchor's placeholder every write said so on
+ * screen instead of opening a wallet prompt that could not succeed.
  */
-export const PROGRAM_ID = "Fg6PaFpoGXkYsidMpWxTWqkZpY6W2BeZ7FEfcYkgMQbS";
+export const PROGRAM_ID = "CCSVvtVuDpH1wCCQWExCpdmZ1sqUBabJA1QQGai7aVaY";
 
-/** True while `PROGRAM_ID` is Anchor's placeholder rather than a deployed address. */
-export const PROGRAM_IS_DEPLOYED = false;
+/** False while `PROGRAM_ID` is a placeholder rather than a deployed address. */
+export const PROGRAM_IS_DEPLOYED = true;
 
 export const SEED_GUARD = "guard";
 export const SEED_VAULT = "vault";

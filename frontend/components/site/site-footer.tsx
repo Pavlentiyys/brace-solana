@@ -76,11 +76,7 @@ export function SiteFooter() {
           </FooterColumn>
         </div>
 
-        <div className="mt-12 flex flex-col gap-3 border-t border-line pt-6 text-[12px] text-ink-faint sm:flex-row sm:items-center sm:justify-between">
-          <p>
-            {site.program.deployed ? "Program" : "Program (not deployed)"}{" "}
-            <span className="num break-all text-ink-faint">{site.program.id}</span>
-          </p>
+        <div className="mt-12 border-t border-line pt-6 text-[12px] text-ink-faint">
           <p>
             Built on Solana. Works with{" "}
             <Link

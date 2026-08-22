@@ -130,6 +130,8 @@ function positionAt(state: World): PositionSnapshot {
     debtValue: state.debtValue,
     liquidationLtvBps: LIQUIDATION_LTV_BPS,
     priceUpdatedAt: state.priceUpdatedAt,
+    // The browser world has nothing to be stale about.
+    refreshed: true,
   };
 }
 
@@ -146,6 +148,7 @@ function unsupportedPosition(state: World): DiscoveredPosition {
       debtValue: 210_000_000n,
       liquidationLtvBps: 7_500,
       priceUpdatedAt: state.priceUpdatedAt,
+      refreshed: true,
     },
     supported: false,
     unsupportedReason:

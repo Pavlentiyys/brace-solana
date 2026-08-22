@@ -12,6 +12,7 @@ import { formatTokenAmount } from "@/lib/core/units";
 import { shortenAddress } from "@/lib/core/tx/base58";
 import { usePlatform, useSnapshot } from "@/lib/platform/provider";
 import type { DiscoveredPosition } from "@/lib/platform/types";
+import { PHANTOM_INSTALL_URL } from "@/lib/platform/wallet";
 
 /**
  * Screen 2.2, which is four screens wearing one name.
@@ -24,9 +25,13 @@ import type { DiscoveredPosition } from "@/lib/platform/types";
  */
 
 export function ConnectGate({ children }: { children: ReactNode }) {
-  const { status, walletFailure, connect, wallet } = usePlatform();
+  const { status, walletFailure, connect, wallet, config, injectedAvailable, useDemoWallet } =
+    usePlatform();
 
   if (status === "connected") return <>{children}</>;
+
+  const onInjected = wallet.kind === "injected";
+  const clusterNote = en.app.connect.clusterNote.replaceAll("{cluster}", config.clusterLabel);
 
   return (
     <div className="max-w-[62ch]">
@@ -38,6 +43,39 @@ export function ConnectGate({ children }: { children: ReactNode }) {
         </ActionButton>
         <Note>{en.app.connect.readOnlyNote}</Note>
       </div>
+
+      {onInjected ? (
+        <Note className="mt-4">{clusterNote}</Note>
+      ) : (
+        // Not merely "no wallet": the extension may still be injecting, and the demo
+        // wallet may have been chosen deliberately. Both read as "no Phantom yet",
+        // and the honest thing to offer is the install link either way.
+        <div className="mt-6 rounded-panel border border-line bg-raised p-4">
+          <p className="text-[13px] text-ink">{en.app.connect.installTitle}</p>
+          <p className="mt-2 text-[13px] leading-relaxed text-ink-dim">
+            {en.app.connect.installBody}
+          </p>
+          <a
+            href={PHANTOM_INSTALL_URL}
+            rel="noreferrer noopener"
+            target="_blank"
+            className="mt-3 inline-block text-[13px] text-accent underline-offset-4 hover:underline"
+          >
+            {en.app.connect.installCta}
+          </a>
+          <Note className="mt-3">{en.app.connect.demoFallbackNote}</Note>
+        </div>
+      )}
+
+      {injectedAvailable && onInjected ? (
+        <button
+          type="button"
+          onClick={useDemoWallet}
+          className="mt-4 text-[12px] text-ink-faint underline-offset-4 transition-colors duration-300 hover:text-ink-dim hover:underline"
+        >
+          {en.app.connect.demoFallback}
+        </button>
+      ) : null}
 
       {walletFailure ? <FailureNotice className="mt-6" failure={walletFailure} onRetry={connect} /> : null}
     </div>

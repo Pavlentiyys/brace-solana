@@ -33,11 +33,11 @@ const FAULTS: DemoFault[] = [
 const copy = en.app.demoControls;
 
 export function DemoControls() {
-  const { config } = usePlatform();
+  const { world } = usePlatform();
   const client = useQueryClient();
   const [active, setActive] = useState<DemoFault[]>(demoControls.faults());
 
-  if (config.mode !== "demo") return null;
+  if (world !== "demo") return null;
 
   function refresh() {
     setActive(demoControls.faults());

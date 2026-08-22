@@ -1,18 +1,20 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { JetBrains_Mono, Sora } from "next/font/google";
 
 import { en } from "@/content/en";
 import { site } from "@/content/site";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-jetbrains-mono",
+  subsets: ["latin", "cyrillic"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const sora = Sora({
+  variable: "--font-sora",
   subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -57,7 +59,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       // The landing page anchors scroll smoothly; route transitions should not.
       // Without this Next warns and jumps between routes animate.
       data-scroll-behavior="smooth"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${jetbrainsMono.variable} ${sora.variable} h-full antialiased`}
     >
       <body className="grain flex min-h-full flex-col">
         <a

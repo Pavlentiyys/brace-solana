@@ -7,7 +7,10 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-guard = "Fg6PaFpoGXkYsidMpWxTWqkZpY6W2BeZ7FEfcYkgMQbS"
+guard = "CCSVvtVuDpH1wCCQWExCpdmZ1sqUBabJA1QQGai7aVaY"
+
+[programs.devnet]
+guard = "CCSVvtVuDpH1wCCQWExCpdmZ1sqUBabJA1QQGai7aVaY"
 
 [provider]
 cluster = "Localnet"

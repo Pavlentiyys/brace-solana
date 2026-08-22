@@ -1,4 +1,5 @@
 import { ButtonLink } from "@/components/ui/button";
+import { HeroBackground } from "@/components/ui/hero-background";
 import { Container } from "@/components/ui/section";
 import { en } from "@/content/en";
 import { money, percentFromBps, tokens } from "@/lib/core/format";
@@ -36,8 +37,10 @@ export function Hero() {
     // a layout bug. Bounded padding puts the hero where a hero goes and lets
     // the simulator show its top edge, which invites a scroll better than a
     // scroll cue would.
-    <section className="py-20 md:py-28">
-      <Container>
+    <section className="relative isolate overflow-hidden py-28 sm:py-32 md:py-40">
+      <HeroBackground />
+
+      <Container className="relative z-10">
         {/*
           The split waits for xl, not lg. At 1024 a two-column hero leaves the
           headline about 530px to work with, and 40px type in 530px runs to
@@ -45,7 +48,7 @@ export function Hero() {
         */}
         <div className="grid items-center gap-12 xl:grid-cols-[1.1fr_0.9fr] xl:gap-16">
           <div>
-            <h1 className="max-w-[32ch] text-[1.75rem] leading-[1.15] tracking-tight text-ink sm:text-[2.125rem] xl:text-[2.5rem]">
+            <h1 className="max-w-[32ch] text-[1.875rem] leading-[1.15] tracking-tight text-ink sm:text-[2.25rem] xl:text-[3rem]">
               {en.hero.headline}
             </h1>
 

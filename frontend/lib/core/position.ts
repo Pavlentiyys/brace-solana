@@ -37,6 +37,20 @@ export interface PositionSnapshot {
 
   /** Unix seconds at which the price behind these values was published. */
   priceUpdatedAt: number;
+
+  /**
+   * Whether the lending protocol had refreshed this position when it was read.
+   *
+   * KLend recomputes an obligation's values inside `refresh_obligation` and marks it
+   * stale afterwards, so an account read between transactions can carry figures from
+   * an older price or, on a position that has never been refreshed, none at all. The
+   * interface has to say so: an LTV derived from stale values is not a reading a
+   * user should act on, and rendering it as though it were current is the quiet
+   * version of lying about somebody's risk.
+   *
+   * The demo world is always refreshed, because there is nothing to be stale about.
+   */
+  refreshed: boolean;
 }
 
 /** The reading every threshold comparison in the interface runs on. */

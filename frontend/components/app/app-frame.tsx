@@ -9,6 +9,7 @@ import { ActionButton, Note } from "@/components/app/ui";
 import { en } from "@/content/en";
 import { cn } from "@/lib/cn";
 import { shortenAddress } from "@/lib/core/tx/base58";
+import { addressExplorerUrl } from "@/lib/platform/config";
 import { demoControls } from "@/lib/platform/demo-source";
 import { usePlatform } from "@/lib/platform/provider";
 
@@ -23,18 +24,24 @@ import { usePlatform } from "@/lib/platform/provider";
 
 const LINKS = [
   { href: "/app", label: en.app.nav.panel },
-  { href: "/app/reserve", label: en.app.nav.reserve },
   { href: "/app/history", label: en.app.nav.history },
 ] as const;
 
 function DemoBanner() {
-  const { config } = usePlatform();
-  if (config.mode !== "demo") return null;
+  const { config, wallet, status, world } = usePlatform();
+  if (world !== "demo") return null;
 
+  // Three reasons to be in the demo world, and they are not interchangeable. The
+  // first is a choice the reader made and can undo; the other two are facts about
+  // the deployment.
   const body =
-    config.demoReason === "program_not_deployed"
-      ? en.app.demoBanner.programNotDeployed
-      : en.app.demoBanner.notConfigured;
+    wallet.kind === "demo" && status === "connected"
+      ? en.app.demoBanner.demoWallet
+      : config.demoReason === "program_not_deployed"
+        ? en.app.demoBanner.programNotDeployed
+        : en.app.demoBanner.notConfigured;
+
+  const walletIsReal = wallet.kind === "injected" && status === "connected";
 
   return (
     <div className="border-b border-line bg-raised">
@@ -42,19 +49,45 @@ function DemoBanner() {
         <span className="text-[12px] uppercase tracking-[0.08em] text-state-warn">
           {en.app.demoBanner.title}
         </span>
-        <p className="max-w-[80ch] flex-1 text-[12px] leading-relaxed text-ink-dim">{body}</p>
+        <p className="max-w-[80ch] flex-1 text-[12px] leading-relaxed text-ink-dim">
+          {body}
+          {walletIsReal
+            ? ` ${en.app.demoBanner.realWallet.replaceAll("{cluster}", config.clusterLabel)}`
+            : null}
+        </p>
       </div>
     </div>
   );
 }
 
 function WalletButton() {
-  const { status, address, connect, disconnect } = usePlatform();
+  const { status, address, connect, disconnect, config, wallet } = usePlatform();
 
   if (status === "connected" && address) {
+    // The demo address is not on any cluster, so it gets neither the cluster label
+    // nor an explorer link. A link that resolves to somebody else's account would be
+    // worse than no link.
+    const onChain = wallet.kind === "injected";
+
     return (
-      <div className="flex items-center gap-3">
-        <span className="num text-[12px] text-ink-dim">{shortenAddress(address)}</span>
+      <div className="flex shrink-0 items-center gap-3">
+        {onChain ? (
+          <span className="rounded-panel border border-line px-2 py-0.5 text-[11px] uppercase tracking-[0.08em] text-ink-faint">
+            {config.clusterLabel}
+          </span>
+        ) : null}
+        {onChain ? (
+          <a
+            href={addressExplorerUrl(config, address)}
+            rel="noreferrer noopener"
+            target="_blank"
+            className="num text-[12px] text-ink-dim underline-offset-4 transition-colors duration-300 hover:text-ink hover:underline"
+          >
+            {shortenAddress(address)}
+          </a>
+        ) : (
+          <span className="num text-[12px] text-ink-dim">{shortenAddress(address)}</span>
+        )}
         <button
           type="button"
           onClick={disconnect}
@@ -75,43 +108,43 @@ function WalletButton() {
 
 export function AppFrame({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { config, status } = usePlatform();
+  const { status, world } = usePlatform();
 
   return (
     <div className="flex min-h-full flex-col">
-      <DemoBanner />
+      {pathname === "/app/faucet" ? null : <DemoBanner />}
 
       <div className="border-b border-line">
         <div className="mx-auto flex w-full max-w-[1200px] items-center justify-between gap-4 px-5 py-3 md:px-8">
-          <nav aria-label="App" className="min-w-0">
-            <ul className="flex items-center gap-4 text-[13px] sm:gap-6">
-              <li className="hidden sm:block">
-                <Link
-                  href="/"
-                  className="rounded-panel transition-opacity duration-300 hover:opacity-80"
-                >
-                  <Wordmark className="flex items-center gap-2" />
-                </Link>
-              </li>
-              {LINKS.map((link) => {
-                const active = pathname === link.href;
-                return (
-                  <li key={link.href}>
-                    <Link
-                      href={link.href}
-                      aria-current={active ? "page" : undefined}
-                      className={cn(
-                        "rounded-panel transition-colors duration-300",
-                        active ? "text-ink" : "text-ink-dim hover:text-ink",
-                      )}
-                    >
-                      {link.label}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </nav>
+          <div className="flex min-w-0 flex-1 items-center gap-5">
+            <Link
+              href="/"
+              className="hidden shrink-0 rounded-panel transition-opacity duration-300 hover:opacity-80 sm:block"
+            >
+              <Wordmark className="flex items-center gap-2" />
+            </Link>
+            <nav aria-label="App" className="min-w-0 flex-1 overflow-x-auto">
+              <ul className="flex w-max items-center gap-4 text-[13px] sm:gap-6">
+                {LINKS.map((link) => {
+                  const active = pathname === link.href;
+                  return (
+                    <li key={link.href}>
+                      <Link
+                        href={link.href}
+                        aria-current={active ? "page" : undefined}
+                        className={cn(
+                          "rounded-panel transition-colors duration-300",
+                          active ? "text-ink" : "text-ink-dim hover:text-ink",
+                        )}
+                      >
+                        {link.label}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </nav>
+          </div>
 
           <WalletButton />
         </div>
@@ -121,7 +154,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
         {children}
       </div>
 
-      {config.mode === "demo" && status === "connected" ? (
+      {pathname !== "/app/faucet" && world === "demo" && status === "connected" ? (
         <div className="border-t border-line">
           <div className="mx-auto w-full max-w-[1200px] px-5 py-4 md:px-8">
             <button

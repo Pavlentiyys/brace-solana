@@ -1,0 +1,22 @@
+{
+  "cluster": "devnet",
+  "createdAt": "2026-08-22T03:27:51.520Z",
+  "authority": "En39AP3pTvZStLnWWZ6dWH1uYCHa3Ww4B68TvmheykcM",
+  "lendingMarket": "8TSZgjY2KLo9vQjE2nZ7ovM4V8jaseTtVtwkvFFC4WiY",
+  "lendingMarketAuthority": "3GnaxrTWQ66U946HHAfP8tDeQznDhhJVu641kyMwZWDA",
+  "collateral": {
+    "label": "bSOL",
+    "mint": "A7bn68WZhbeBEBAwp9iiQoQW4mA8ArHyScsXSdoMUwBT",
+    "decimals": 9,
+    "reserve": "816kGooSBnSVtvEGs76CQjfvH3M5NwWA24jrGSvc2ddW",
+    "pythFeed": "7UVimffxr9ow1uXYxsr4LHAcV58mLzhmwaeKvJ1pjLiE"
+  },
+  "debt": {
+    "label": "bUSDC",
+    "mint": "BqpSppkpYTZY75xQ1bkE1AdEkXuG1D8wZaDypyS5Ma9g",
+    "decimals": 6,
+    "reserve": "5g44rMDQfM2kdQkiRmPE1xLbFsfaWfJha9xnQFwUBVUR",
+    "pythFeed": "Dpw1EAVrSB1ibxiDQyTAW6Zip3J4Btk2x4SgApQCeFbX"
+  },
+  "agent": "E2bkap2NU3W8Dr7hzgE5Bxxy6ZT7cmxqnJwFuWd7jmgt"
+}

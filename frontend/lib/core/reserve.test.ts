@@ -18,6 +18,7 @@ const POSITION: PositionSnapshot = {
   collateralValue: 6_400_000_000n,
   debtValue: 3_700_000_000n,
   liquidationLtvBps: 8_000,
+  refreshed: true,
   priceUpdatedAt: NOW,
 };
 

@@ -45,9 +45,6 @@ export const en = {
 
   simulator: {
     heading: "Run it against a market that already happened",
-    body: "Same position, same reserve, same rule. Only the market changes. Two of these three outcomes are worse with the agent than without it.",
-    exampleDataNote:
-      "Example data. Price series are shaped from real drawdowns and are not tick data or a backtest.",
     scenarioLabel: "Market",
     positionHeading: "Position and rule",
     resultHeading: "Outcome at the last price",
@@ -106,44 +103,6 @@ export const en = {
       "Act after the authorization expires",
       "Act while your position is healthy",
     ],
-    verifyHeading: "Check this yourself",
-    verifyBody:
-      "The list of instructions the program exposes is public. There is no instruction that transfers to an arbitrary address, which is why the agent cannot do it, rather than promising not to.",
-    programLabel: "Program",
-    notDeployedNote:
-      "There is no explorer link yet because the program has not been deployed. Until it is, treat everything on this page as a description of intent.",
-  },
-
-  timeline: {
-    heading: "What happens during a fall",
-    note: "Example event. The timings are targets, not measured averages: the watcher is not running in production yet.",
-    steps: [
-      {
-        label: "Price crosses your threshold",
-        detail: "SOL reaches $129.20. Your LTV reaches 71.59%, past the 70.00% you set.",
-        timing: "0s",
-      },
-      {
-        label: "The watcher reads the new position",
-        detail: "It holds a subscription to the obligation account, so it is not polling for this.",
-        timing: "under 4s",
-      },
-      {
-        label: "The agent submits the action",
-        detail: "Add $799.74 of collateral from your reserve. Nothing else is in the transaction.",
-        timing: "under 1s",
-      },
-      {
-        label: "The transaction confirms",
-        detail: "LTV goes from 71.59% to 62.00%. Liquidation moves from $115.63 to $100.13.",
-        timing: "under 15s",
-      },
-      {
-        label: "The report reaches your chat",
-        detail: "What was done, how much, LTV before and after, a link to the transaction.",
-        timing: "under 5s",
-      },
-    ],
   },
 
   limits: {
@@ -171,27 +130,6 @@ export const en = {
     ],
   },
 
-  pricing: {
-    heading: "Price",
-    figure: "Free",
-    figureLabel: "during the private beta",
-    body: "Pricing after the beta is not decided. It will be published on this page before anything changes.",
-    rows: [
-      {
-        label: "Network fees",
-        value: "about $0.0025 per action",
-        detail:
-          "You pay Solana fees for every action the agent takes, at recent priority fee levels. A rule that fires three times during a fall costs under a cent.",
-      },
-      {
-        label: "Reserve",
-        value: "yours, withdrawable at any time",
-        detail:
-          "The reserve stays your money. Withdrawing it is not blocked by a paused agent, an expired authorization or a revoked one.",
-      },
-    ],
-  },
-
   start: {
     heading: "Getting started",
     cta: "Open the app",
@@ -212,36 +150,6 @@ export const en = {
         title: "Grant authorization and fund the reserve",
         body: "Two signatures in the web app. This is the only step that needs your wallet, and it is the only thing the chat cannot do.",
         requires: "A wallet",
-      },
-    ],
-  },
-
-  founders: {
-    heading: "Founders",
-    badge: "Core Team",
-    lead: "Meet the core builders behind Brace autonomous liquidation defense.",
-    githubLabel: "GitHub profile of",
-    telegramLabel: "Telegram of",
-    members: [
-      {
-        name: "Miroslav",
-        handle: "@miroslawvwv",
-        role: "CEO & Product Architect",
-        avatar: "https://github.com/gEomX12.png",
-        bio: "Driving Brace product vision, high-density Web3 UX, and Kamino ecosystem integrations.",
-        stack: ["Product UX", "Next.js", "DeFi Strategy", "Solana"],
-        github: "https://github.com/gEomX12",
-        telegram: "https://t.me/miroslawvwv",
-      },
-      {
-        name: "Pavel",
-        handle: "@Mirceya",
-        role: "CTO & Lead Protocol Engineer",
-        avatar: "https://github.com/Pavlentiyys.png",
-        bio: "Architecting low-latency Solana programs, autonomous keeper infrastructure, and MEV-safe liquidation defense.",
-        stack: ["Rust / Anchor", "Solana Core", "Keeper Infra", "Risk Engine"],
-        github: "https://github.com/Pavlentiyys",
-        telegram: "https://t.me/Mirceya",
       },
     ],
   },
@@ -271,7 +179,6 @@ export const en = {
   app: {
     nav: {
       panel: "Position",
-      reserve: "Reserve",
       history: "History",
       authorize: "Authorization",
     },
@@ -281,8 +188,62 @@ export const en = {
         "The program is not deployed, so this app runs against a world in your browser. The price moves, the rule fires, the reserve goes down. Nothing here touches a chain and no receipt has a transaction to link to.",
       programNotDeployed:
         "An RPC endpoint is configured, but the program id is still the placeholder in the source, so there is nothing to read. Until the program is deployed the app runs against a world in your browser.",
+      /**
+       * Shown only once a browser wallet is connected. Without it the banner reads
+       * as though the address is fake too, and a user who then recognises their own
+       * address concludes the banner is lying about the rest.
+       */
+      realWallet:
+        "The connection itself is real: that is your own {cluster} address in the header. Everything below it is the demo world.",
+      demoWallet:
+        "You are on the demo wallet, so this is a world that runs in this browser tab. Connect Phantom instead to read your own Kamino positions from the cluster.",
       reset: "Reset the demo",
     },
+    chat: {
+      heading: "Brace",
+      lead:
+        "Ask about the position in your own words. Actions open the same guarded panels the app would render; broader questions go to the assistant.",
+      placeholder: "How close am I to liquidation?",
+      inputLabel: "Ask the agent",
+      send: "Send",
+      newChat: "New chat",
+      deleteChat: "Delete chat",
+      note:
+        "Your chats are kept in this browser so the list survives a reload, and never leave it. Delete any of them with the × beside its name. Free-form questions go to Brace's server-side language model route.",
+    },
+
+    openPosition: {
+      heading: "Open a test borrow",
+      body:
+        "Every Kamino market that already exists on devnet prices its collateral in a test token somebody else controls, so a borrow cannot be opened on any of them. This one was created for the project, holds live Pyth prices, and hands out its own collateral. The position is a real Kamino obligation.",
+      action: "Open the position",
+      stages: {
+        depositing: "Depositing collateral",
+        borrowing: "Borrowing",
+        refreshing: "Refreshing",
+      } as Record<string, string>,
+      signatures:
+        "Three signatures: deposit, borrow, and a refresh so the numbers are current.",
+      needsWallet: "Connect a wallet first.",
+      demoWallet:
+        "The demo wallet cannot sign. Connect Phantom to open a position on the cluster.",
+      rejected: "You dismissed the wallet prompt. Nothing was sent.",
+      wrongCluster:
+        "This market lives on {cluster}. Point the app there to open a position.",
+      done: "Done. Ask how the position is doing and it will read back off the cluster.",
+    },
+
+    proposal: {
+      heading: "The agent proposes",
+      confirm: "Confirm and sign",
+      done: "Signed",
+      note: "Nothing happens until you sign this in your wallet.",
+      rejected: "The program would reject this rule, so it was checked here first:",
+      needsPosition: "Pick a position first.",
+      waiting: "Reading your position before this can be checked.",
+      cannotSign: "Connect Phantom to sign this.",
+    },
+
     connect: {
       heading: "Connect a wallet",
       body: "The web app exists for the four things that need a signature: authorization, funding the reserve, withdrawing it, and revoking. Everything else lives in the chat.",
@@ -292,6 +253,60 @@ export const en = {
       disconnect: "Disconnect",
       readOnlyNote:
         "Connecting reads your public address. It does not authorize anything and does not move anything.",
+      /**
+       * An address is the same on every cluster, so the usual "you are on the wrong
+       * network" warning cannot be shown by comparing addresses. What differs is
+       * balances and simulation, and that is what this says instead of implying the
+       * connection itself is wrong.
+       */
+      clusterNote:
+        "This app is pointed at {cluster}. Your address is the same on every cluster, but balances and anything you sign are not, so set Phantom to {cluster} under Settings, Developer Settings before you authorize.",
+      installTitle: "Phantom is not installed in this browser",
+      installBody:
+        "Install it and reload this page, or look around the app first with the demo wallet.",
+      installCta: "Get Phantom",
+      demoFallback: "Continue with the demo wallet",
+      demoFallbackNote:
+        "A fixed address and a world that runs in this browser. Nothing is read from a chain and nothing is signed.",
+    },
+    faucet: {
+      heading: "Devnet faucet",
+      lead:
+        "Request test SOL for development. The request goes directly to the configured Solana devnet RPC and never asks your wallet to sign.",
+      cardTitle: "Request test SOL",
+      addressLabel: "Destination address",
+      addressPlaceholder: "Solana public key",
+      addressNote: "Paste any devnet wallet address. A private key is never needed.",
+      connectedAddress: "Your connected browser wallet is selected. You can paste another address instead.",
+      useConnected: "Use the connected wallet",
+      devnetOnlyTitle: "Devnet only",
+      devnetOnlyBody:
+        "Change NEXT_PUBLIC_BRACE_CLUSTER to devnet before using this page. No request will be sent from testnet or mainnet.",
+      request: "Request {amount} SOL",
+      requesting: "Requesting",
+      confirming: "Confirming",
+      retry: "Try again",
+      checkAgain: "Check confirmation",
+      requestAgain: "Request another 1 SOL",
+      valueNote: "Devnet SOL has no monetary value. Public faucet limits still apply.",
+      idle: "No request has been sent from this page yet.",
+      requestingStatus: "The faucet is creating the airdrop transaction.",
+      confirmingStatus: "The request was accepted. Waiting for confirmation.",
+      success: "1 devnet SOL was confirmed.",
+      signature: "Transaction",
+      to: "to",
+      errors: {
+        unsupported_cluster: "The faucet is only available on devnet.",
+        invalid_address: "Enter a valid Solana public key.",
+        rate_limited: "The public faucet rate limit was reached. Wait a while, then try again.",
+        rpc_unavailable: "The configured devnet RPC could not be reached.",
+        rpc_rejected: "The faucet rejected this request. Its quota may be exhausted; try again later.",
+        invalid_response: "The devnet RPC returned a response this app could not verify.",
+        transaction_failed: "The airdrop transaction failed on devnet.",
+        confirmation_timeout:
+          "The request was sent but confirmation is taking longer than expected. Check it again before requesting more SOL.",
+        unknown: "The faucet request failed unexpectedly.",
+      },
     },
     discovery: {
       heading: "Your borrows",
@@ -470,7 +485,7 @@ export const en = {
       retry: "Try again",
       wallet_unavailable: {
         title: "No wallet in this browser",
-        body: "Install a Solana wallet and reload the page.",
+        body: "Install Phantom and reload the page, or continue with the demo wallet to look around first.",
       },
       wallet_rejected: {
         title: "You dismissed the wallet prompt",
@@ -544,7 +559,12 @@ export const en = {
         summary: "Revoke authorization, withdraw the reserve, unlink the bot.",
         ready: true,
       },
-      { title: "Getting started", summary: "Connecting, first rule, authorization, reserve.", ready: false },
+      {
+        title: "Getting started",
+        href: "/docs/getting-started",
+        summary: "Connecting, first rule, authorization, reserve.",
+        ready: true,
+      },
       { title: "How a rule works", summary: "Thresholds, targets, amount and rate limits, expiry.", ready: false },
       { title: "Security", summary: "Full instruction list, key handling, compromise scenarios.", ready: false },
       { title: "Limits", summary: "The market conditions where the agent is useless or harmful.", ready: false },

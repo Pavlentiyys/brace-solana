@@ -43,7 +43,7 @@ export const site = {
    * render as plain text with a "not yet" note rather than as dead links.
    */
   links: {
-    github: null as string | null,
+    github: "https://github.com/Pavlentiyys/brace-solana",
     contact: null as string | null,
     status: null as string | null,
     bot: null as string | null,

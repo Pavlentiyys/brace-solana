@@ -11,7 +11,7 @@ pub mod state;
 
 pub use instructions::*;
 
-declare_id!("Fg6PaFpoGXkYsidMpWxTWqkZpY6W2BeZ7FEfcYkgMQbS");
+declare_id!("CCSVvtVuDpH1wCCQWExCpdmZ1sqUBabJA1QQGai7aVaY");
 
 #[program]
 pub mod guard {

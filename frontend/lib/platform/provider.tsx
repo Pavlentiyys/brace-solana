@@ -4,36 +4,68 @@
  * One provider for the whole app section: which source, which wallet, and the query
  * cache in front of both.
  *
- * The polling interval is one second and that is not a placeholder. PLATFORM.md 2.5
- * requires a liveness readout accurate enough to show a watcher falling behind, and
- * a panel that refreshes every thirty seconds cannot distinguish "checked 4 seconds
- * ago" from "checked 34 seconds ago". Against a real cluster the same query gets
- * invalidated by the account subscription instead, which is what section 5 means by
- * invalidation over WebSocket; the interval stays as the fallback for when the
- * socket is the thing that died.
+ * Which source is not a configuration switch: it follows the wallet. A real address
+ * reads real Kamino positions off the cluster, the demo wallet reads the browser
+ * world, and the two never mix. See `world` below.
  */
 
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { readConfig, type PlatformConfig } from "@/lib/platform/config";
 import { createChainSource } from "@/lib/platform/chain-source";
 import { demoSource } from "@/lib/platform/demo-source";
-import type { DiscoveredPosition, Failure, GuardSource, Outcome, Snapshot } from "@/lib/platform/types";
-import { demoWallet, injectedWallet, WalletRejected, type WalletPort } from "@/lib/platform/wallet";
+import type {
+  DiscoveredPosition,
+  Failure,
+  GuardSource,
+  Outcome,
+  PlatformMode,
+  Snapshot,
+} from "@/lib/platform/types";
+import {
+  demoWallet,
+  detectInjectedWallet,
+  injectedWallet,
+  watchInjectedWallet,
+  WalletRejected,
+  type WalletPort,
+} from "@/lib/platform/wallet";
 
+/**
+ * One second against the browser world, fifteen against a cluster.
+ *
+ * The fast interval exists because PLATFORM.md 2.5 needs a liveness readout able to
+ * show a watcher falling behind, and thirty seconds cannot tell "checked 4 seconds
+ * ago" from "checked 34". Pointing that same interval at a public RPC endpoint gets
+ * the app rate limited within a minute, and a panel that 429s is worse at reporting
+ * liveness than one that polls slowly. Against a real cluster the account
+ * subscription of section 5 is what makes this interval a fallback rather than the
+ * mechanism.
+ */
 export const SNAPSHOT_INTERVAL_MS = 1_000;
+export const CHAIN_SNAPSHOT_INTERVAL_MS = 15_000;
 
 export type WalletStatus = "disconnected" | "connecting" | "connected";
 
 interface PlatformValue {
   config: PlatformConfig;
+  /**
+   * Which world the screens are reading. Derived from the wallet, not from config:
+   * `config.mode` says what the deployment could support, this says what is
+   * actually on screen right now.
+   */
+  world: PlatformMode;
   source: GuardSource;
   wallet: WalletPort;
   status: WalletStatus;
   address: string | null;
   /** Set when the last connect attempt failed, cleared when the next one starts. */
   walletFailure: Failure | null;
+  /** True once a browser wallet has been found. False during the first moments. */
+  injectedAvailable: boolean;
+  /** Falls back to the demo wallet, for reviewers without an extension installed. */
+  useDemoWallet: () => void;
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
   /**
@@ -64,16 +96,77 @@ function createClient(): QueryClient {
 export function PlatformProvider({ children }: { children: ReactNode }) {
   const [client] = useState(createClient);
   const config = useMemo(() => readConfig(), []);
-  const source = useMemo(
-    () => (config.mode === "demo" ? demoSource : createChainSource(config, null)),
-    [config],
-  );
-  const wallet = config.mode === "demo" ? demoWallet : injectedWallet;
-
   const [status, setStatus] = useState<WalletStatus>("disconnected");
   const [address, setAddress] = useState<string | null>(null);
   const [walletFailure, setWalletFailure] = useState<Failure | null>(null);
   const [selected, select] = useState<string | null>(null);
+
+  // Which port, decided independently of which data source. A real address against
+  // the demo world is the intended pairing until the program is deployed.
+  const [injectedAvailable, setInjectedAvailable] = useState(false);
+  const [preferDemo, setPreferDemo] = useState(false);
+  const wallet = !preferDemo && injectedAvailable ? injectedWallet : demoWallet;
+
+  /**
+   * The world follows the wallet, and that is the whole design.
+   *
+   * A real address gets real Kamino positions read off the cluster; the demo wallet
+   * gets the browser world. Anything else is incoherent — a fabricated position
+   * under somebody's own address is the one combination that could mislead them
+   * about their own money.
+   */
+  const world: PlatformMode = wallet.kind === "injected" ? "chain" : "demo";
+  /**
+   * The signer is part of the source, not a separate concern: a chain source without
+   * one can read but not write, and `canWrite` is what the screens branch on.
+   */
+  const source = useMemo(
+    () =>
+      world === "demo"
+        ? demoSource
+        : createChainSource(
+            config,
+            address === null
+              ? null
+              : { address, signAndSend: (transaction) => wallet.signAndSend(transaction) },
+          ),
+    [world, config, address, wallet],
+  );
+
+  // Extensions inject on their own schedule, usually after hydration, so this polls
+  // briefly rather than deciding on first render that nothing is installed.
+  useEffect(() => detectInjectedWallet(() => setInjectedAvailable(true)), []);
+
+  // Reconnect silently when this site was already approved, and follow the wallet
+  // when the user switches account or disconnects from the extension itself.
+  useEffect(() => {
+    if (!injectedAvailable || preferDemo) return;
+
+    let cancelled = false;
+    void injectedWallet.eagerConnect().then((trusted) => {
+      if (!cancelled && trusted !== null) {
+        setAddress(trusted);
+        setStatus("connected");
+      }
+    });
+
+    const unwatch = watchInjectedWallet((next) => {
+      setAddress(next);
+      setStatus(next === null ? "disconnected" : "connected");
+      if (next === null) select(null);
+      client.clear();
+    });
+
+    return () => {
+      cancelled = true;
+      unwatch();
+    };
+  }, [injectedAvailable, preferDemo, client]);
+
+  function useDemoWallet() {
+    setPreferDemo(true);
+    setWalletFailure(null);
+  }
 
   async function connect() {
     setWalletFailure(null);
@@ -107,11 +200,14 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
 
   const value: PlatformValue = {
     config,
+    world,
     source,
     wallet,
     status,
     address,
     walletFailure,
+    injectedAvailable,
+    useDemoWallet,
     connect,
     disconnect,
     selected,
@@ -154,7 +250,7 @@ export function useSnapshot(): SnapshotQuery {
   const query = useQuery({
     queryKey: [SNAPSHOT_KEY, source.mode, address],
     enabled: address !== null,
-    refetchInterval: SNAPSHOT_INTERVAL_MS,
+    refetchInterval: source.mode === "demo" ? SNAPSHOT_INTERVAL_MS : CHAIN_SNAPSHOT_INTERVAL_MS,
     queryFn: () => source.snapshot(address!),
   });
 

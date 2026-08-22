@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Wordmark } from "@/components/site/mark";
 import { Container } from "@/components/ui/section";
 import { en } from "@/content/en";
+import { site } from "@/content/site";
 
 /**
  * One line at every width, 64px tall, and no call to action.
@@ -21,27 +22,35 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-canvas/80 backdrop-blur-md">
       <Container>
-        <div className="flex h-16 items-center justify-between gap-4">
+        <div className="flex h-20 items-center justify-between gap-4 md:h-24">
           <Link
             href="/"
             className="flex items-center gap-2 rounded-panel transition-opacity duration-300 hover:opacity-80"
           >
-            <Wordmark className="flex items-center gap-2" />
+            <Wordmark className="flex shrink-0 items-center gap-2" size="large" />
           </Link>
 
-          <nav aria-label="Main" className="flex items-center gap-6">
+          <nav aria-label="Main" className="flex min-w-0 items-center justify-end gap-4 overflow-x-auto sm:gap-6">
             <Link
               href="/docs"
-              className="rounded-panel text-[13px] text-ink-dim transition-colors duration-300 hover:text-ink"
+              className="whitespace-nowrap rounded-panel text-[13px] text-ink-dim transition-colors duration-300 hover:text-ink"
             >
               {en.nav.docs}
             </Link>
             <Link
               href="/app"
-              className="rounded-panel text-[13px] text-ink-dim transition-colors duration-300 hover:text-ink"
+              className="whitespace-nowrap rounded-panel text-[13px] text-ink-dim transition-colors duration-300 hover:text-ink"
             >
               {en.nav.app}
             </Link>
+            <a
+              href={site.links.github}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="whitespace-nowrap rounded-panel text-[13px] text-ink-dim transition-colors duration-300 hover:text-ink"
+            >
+              GitHub
+            </a>
           </nav>
         </div>
       </Container>

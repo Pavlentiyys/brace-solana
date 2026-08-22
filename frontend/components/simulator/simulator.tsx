@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 
 import { DataTable } from "@/components/simulator/data-table";
 import { Outcome } from "@/components/simulator/outcome";
-import { SimulatorChart } from "@/components/simulator/simulator-chart";
+import { CandleChart } from "@/components/ui/candle-chart";
 import { en } from "@/content/en";
 import { cn } from "@/lib/cn";
 import { money, percentFromBps } from "@/lib/core/format";
@@ -148,11 +148,14 @@ export function Simulator() {
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-10">
         <div className="min-w-0 rounded-panel border border-line bg-surface p-4 md:p-6">
-          <SimulatorChart
-            result={result}
-            liquidationLtvBps={position.liquidationLtvBps}
-            triggerLtvBps={DEMO_RULE.steps[0].triggerLtvBps}
+          <CandleChart
+            prices={result.prices}
             stepMinutes={scenario.stepMinutes}
+            risk={{
+              withAgent: result.withAgent.ltvBps,
+              withoutAgent: result.withoutAgent.ltvBps,
+              liquidationLtvBps: position.liquidationLtvBps,
+            }}
           />
         </div>
 

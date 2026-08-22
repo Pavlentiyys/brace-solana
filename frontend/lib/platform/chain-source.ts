@@ -1,37 +1,50 @@
 /**
  * The same interface, against a real cluster.
  *
- * Written now and switched on later. The read path below is the finished article:
- * it fetches the owner's guard accounts with a memcmp on the discriminator and the
- * owner field, decodes them with the shared decoder, and reads the vault balance.
- * The moment `declare_id!` holds a deployed address and `NEXT_PUBLIC_BRACE_RPC_URL`
- * is set, this is what the panel renders from.
+ * Tracking a borrow and acting on one are different privileges, and this file
+ * reflects that. Reading a Kamino position needs nothing of ours deployed: the
+ * obligations are Kamino's accounts. So the read path is live today, and only the
+ * writes wait for `declare_id!` to hold a real address.
  *
- * Two things are deliberately not here.
+ * What that buys is the thing PLATFORM.md 2.2 is actually about — showing somebody
+ * their own position, with their own numbers, before asking them to authorize
+ * anything. A guard is attached to a position when one exists and reported as absent
+ * when it does not, which is a state the interface has to render either way.
  *
- * The obligation reader is not: turning a Kamino obligation into the exact
- * `collateralValue` and `debtValue` pair the panel needs means porting the layout in
- * `program/programs/guard/src/adapter/kamino.rs`, and a layout port that cannot be
- * tested against a live account is a guess. It is expressed as `MarketReader` so it
- * can be dropped in and tested on its own.
- *
- * Signing is not: it needs a wallet and a transaction assembler, and neither can be
- * exercised against a program that does not exist. Every write returns
- * `program_not_deployed` rather than opening a wallet prompt that cannot succeed.
+ * Writes are live now that the guard is deployed. They still report failure as a
+ * value rather than a throw, because every one of them has a screen state and none
+ * is exceptional — and while `PROGRAM_IS_DEPLOYED` was false they said so on screen
+ * instead of opening a wallet prompt that could not succeed.
  */
 
 import { decodeGuardConfig, looksLikeGuardAccount } from "@/lib/core/tx/decode";
-import { GUARD_ACCOUNT_DISCRIMINATOR } from "@/lib/core/program";
+import { GUARD_ACCOUNT_DISCRIMINATOR, PROGRAM_IS_DEPLOYED } from "@/lib/core/program";
 import { encodeBase58 } from "@/lib/core/tx/base58";
 import type { Guard } from "@/lib/core/guard";
-import type { PositionSnapshot } from "@/lib/core/position";
+import {
+  decodeMarketName,
+  decodeObligation,
+  decodeReserve,
+  KLEND_PROGRAM_ID,
+  OBLIGATION_SIZE,
+  O_OWNER,
+  toPositionSnapshot,
+  type ObligationInfo,
+  type ReserveInfo,
+} from "@/lib/platform/kamino";
 import type { PlatformConfig } from "@/lib/platform/config";
+import { Connection, PublicKey, Transaction, type TransactionInstruction } from "@solana/web3.js";
+import {
+  depositReserveIx,
+  initGuardIx,
+  revokeIx,
+  updatePolicyIx,
+  withdrawReserveIx,
+  type GuardAccounts,
+} from "@/lib/platform/guard-tx";
+import { DEVNET_MARKET } from "@/lib/platform/devnet-market";
+import { WITHDRAW_ALL } from "@/lib/core/tx/instructions";
 import type { DiscoveredPosition, Failure, GuardSource, Outcome, Snapshot } from "@/lib/platform/types";
-
-/** Anything that can turn an obligation address into the numbers the panel needs. */
-export interface MarketReader {
-  readPosition(obligation: string): Promise<PositionSnapshot>;
-}
 
 export class SourceError extends Error {
   constructor(readonly failure: Failure) {
@@ -61,7 +74,13 @@ async function rpc<T>(url: string, method: string, params: unknown[]): Promise<T
   }
 
   if (!response.ok) {
-    throw new SourceError({ kind: "rpc_unavailable", detail: `${method} returned ${response.status}` });
+    // 429 is what a public endpoint returns first, and it deserves its own words
+    // rather than looking like the cluster is down.
+    const detail =
+      response.status === 429
+        ? "this endpoint is rate limiting the app. Set NEXT_PUBLIC_BRACE_RPC_URL to your own."
+        : `${method} returned ${response.status}`;
+    throw new SourceError({ kind: "rpc_unavailable", detail });
   }
 
   const body = (await response.json()) as RpcResponse<T>;
@@ -84,14 +103,80 @@ function base64ToBytes(encoded: string): Uint8Array {
 }
 
 /**
- * The owner's guards.
+ * Every Kamino obligation this address owns, across every market.
  *
- * Filtered server side on both the account discriminator and the owner key, which
- * sits at offset 8 as the first field of the struct. Without the owner filter this
- * downloads every guard on the program.
+ * Filtered server side on the account size and on the owner at offset 64. Without
+ * the owner filter this downloads every position on the protocol.
  */
+export async function fetchObligations(
+  config: PlatformConfig,
+  owner: string,
+): Promise<ObligationInfo[]> {
+  const accounts = await rpc<ProgramAccount[]>(config.rpcUrl, "getProgramAccounts", [
+    KLEND_PROGRAM_ID,
+    {
+      encoding: "base64",
+      filters: [{ dataSize: OBLIGATION_SIZE }, { memcmp: { offset: O_OWNER, bytes: owner } }],
+    },
+  ]);
+
+  return accounts.flatMap((account) => {
+    try {
+      return [decodeObligation(account.pubkey, base64ToBytes(account.account.data[0]))];
+    } catch {
+      // A layout the decoder does not recognise is skipped rather than thrown: one
+      // unreadable position must not blank out the others.
+      return [];
+    }
+  });
+}
+
+interface MaybeAccount {
+  data: [string, string];
+}
+
+async function fetchAccounts(
+  config: PlatformConfig,
+  keys: string[],
+): Promise<Map<string, Uint8Array>> {
+  const found = new Map<string, Uint8Array>();
+  // getMultipleAccounts caps at 100 keys per call.
+  for (let index = 0; index < keys.length; index += 100) {
+    const batch = keys.slice(index, index + 100);
+    const values = await rpc<{ value: (MaybeAccount | null)[] }>(
+      config.rpcUrl,
+      "getMultipleAccounts",
+      [batch, { encoding: "base64" }],
+    );
+    batch.forEach((key, position) => {
+      const account = values.value[position];
+      if (account) found.set(key, base64ToBytes(account.data[0]));
+    });
+  }
+  return found;
+}
+
+export async function fetchReserves(
+  config: PlatformConfig,
+  keys: string[],
+): Promise<Map<string, ReserveInfo>> {
+  const reserves = new Map<string, ReserveInfo>();
+  for (const [key, bytes] of await fetchAccounts(config, keys)) {
+    try {
+      reserves.set(key, decodeReserve(key, bytes));
+    } catch {
+      // Same reasoning: an unreadable reserve costs a symbol and a price, not the
+      // whole snapshot.
+    }
+  }
+  return reserves;
+}
+
+/** The owner's guards, or none at all while the program id is a placeholder. */
 export async function fetchGuards(config: PlatformConfig, owner: string): Promise<Guard[]> {
-  const accounts = await rpc<ProgramAccount[]>(config.rpcUrl!, "getProgramAccounts", [
+  if (!PROGRAM_IS_DEPLOYED) return [];
+
+  const accounts = await rpc<ProgramAccount[]>(config.rpcUrl, "getProgramAccounts", [
     config.programId,
     {
       encoding: "base64",
@@ -108,49 +193,181 @@ export async function fetchGuards(config: PlatformConfig, owner: string): Promis
     .map((account) => decodeGuardConfig(account.pubkey, account.bytes));
 }
 
-interface TokenBalance {
-  value: { amount: string };
+export async function fetchTokenBalance(
+  config: PlatformConfig,
+  tokenAccount: string,
+): Promise<bigint> {
+  const balance = await rpc<{ value: { amount: string } }>(
+    config.rpcUrl,
+    "getTokenAccountBalance",
+    [tokenAccount],
+  );
+  return BigInt(balance.value.amount);
 }
 
-export async function fetchTokenBalance(config: PlatformConfig, tokenAccount: string): Promise<bigint> {
-  const balance = await rpc<TokenBalance>(config.rpcUrl!, "getTokenAccountBalance", [tokenAccount]);
-  return BigInt(balance.value.amount);
+interface TokenAccounts {
+  value: { account: { data: { parsed: { info: { tokenAmount: { amount: string } } } } } }[];
+}
+
+/**
+ * What the owner holds of `mint`, summed over their token accounts.
+ *
+ * Summed rather than read from the associated account alone, because a wallet can
+ * legitimately hold one mint in several accounts and showing the smaller number
+ * would tell somebody they cannot fund a reserve that they can.
+ */
+async function fetchWalletBalance(
+  config: PlatformConfig,
+  owner: string,
+  mint: string,
+): Promise<bigint> {
+  const accounts = await rpc<TokenAccounts>(config.rpcUrl, "getTokenAccountsByOwner", [
+    owner,
+    { mint },
+    { encoding: "jsonParsed" },
+  ]);
+  return accounts.value.reduce(
+    (total, entry) => total + BigInt(entry.account.data.parsed.info.tokenAmount.amount),
+    0n,
+  );
 }
 
 const NOT_DEPLOYED: Outcome = { ok: false, failure: { kind: "program_not_deployed" } };
 
-export function createChainSource(config: PlatformConfig, market: MarketReader | null): GuardSource {
+/**
+ * Whatever can put a signature on a transaction.
+ *
+ * Structural rather than a wallet type, so this module stays testable and the source
+ * does not care whether the signature came from Phantom or from a script.
+ */
+export interface Signer {
+  address: string;
+  signAndSend(transaction: Transaction): Promise<string>;
+}
+
+/**
+ * Resolves the accounts every guard instruction needs from the obligation alone.
+ *
+ * The vault mint has to be the debt reserve's liquidity mint — `init_guard` checks
+ * it — so it is read off chain rather than chosen here.
+ */
+async function guardAccountsFor(
+  config: PlatformConfig,
+  owner: string,
+  obligationAddress: string,
+): Promise<GuardAccounts | Failure> {
+  const obligations = await fetchObligations(config, owner);
+  const obligation = obligations.find((entry) => entry.address === obligationAddress);
+  if (!obligation) {
+    return { kind: "unknown", detail: "That position is not owned by this address." };
+  }
+
+  const borrow = obligation.borrows[0];
+  if (!borrow) {
+    return { kind: "unknown", detail: "That position has no borrow for the agent to repay." };
+  }
+
+  const reserves = await fetchReserves(config, [borrow.reserve]);
+  const reserve = reserves.get(borrow.reserve);
+  if (!reserve) {
+    return { kind: "unknown", detail: "The debt reserve could not be read." };
+  }
+
+  return {
+    owner: new PublicKey(owner),
+    obligation: new PublicKey(obligation.address),
+    lendingMarket: new PublicKey(obligation.lendingMarket),
+    debtReserve: new PublicKey(borrow.reserve),
+    vaultMint: new PublicKey(reserve.mint),
+  };
+}
+
+export function createChainSource(config: PlatformConfig, signer: Signer | null = null): GuardSource {
+  /** Signs one instruction and reports the outcome as a value, never a throw. */
+  async function send(build: (accounts: GuardAccounts) => TransactionInstruction, obligation: string): Promise<Outcome> {
+    if (!PROGRAM_IS_DEPLOYED) return NOT_DEPLOYED;
+    if (signer === null) return { ok: false, failure: { kind: "wallet_unavailable" } };
+
+    try {
+      const accounts = await guardAccountsFor(config, signer.address, obligation);
+      if (!("owner" in accounts)) return { ok: false, failure: accounts };
+
+      const connection = new Connection(config.rpcUrl, "confirmed");
+      const transaction = new Transaction().add(build(accounts));
+      const { blockhash } = await connection.getLatestBlockhash("confirmed");
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = accounts.owner;
+
+      const signature = await signer.signAndSend(transaction);
+      await connection.confirmTransaction(signature, "confirmed");
+      return { ok: true, signature };
+    } catch (error) {
+      return { ok: false, failure: asWriteFailure(error) };
+    }
+  }
+
   async function snapshot(owner: string): Promise<Snapshot> {
-    if (config.rpcUrl === null) {
-      throw new SourceError({ kind: "rpc_unavailable", detail: "no endpoint configured" });
-    }
+    const obligations = await fetchObligations(config, owner);
 
-    const guards = await fetchGuards(config, owner);
-    if (market === null) {
-      throw new SourceError({
-        kind: "unknown",
-        detail:
-          "The market reader for Kamino obligations is not implemented yet, so positions cannot be shown against a live cluster.",
-      });
-    }
+    const reserveKeys = [
+      ...new Set(
+        obligations.flatMap((obligation) => [
+          ...obligation.deposits.map((entry) => entry.reserve),
+          ...obligation.borrows.map((entry) => entry.reserve),
+        ]),
+      ),
+    ];
+    const marketKeys = [...new Set(obligations.map((obligation) => obligation.lendingMarket))];
 
-    const positions: DiscoveredPosition[] = await Promise.all(
-      guards.map(async (guard) => ({
-        position: await market.readPosition(guard.obligation),
-        supported: true,
-        guard,
-      })),
+    const [reserves, markets, guards] = await Promise.all([
+      fetchReserves(config, reserveKeys),
+      fetchAccounts(config, marketKeys),
+      fetchGuards(config, owner),
+    ]);
+
+    const positions: DiscoveredPosition[] = obligations.map((obligation) => {
+      const marketBytes = markets.get(obligation.lendingMarket);
+      const position = toPositionSnapshot(
+        obligation,
+        reserves,
+        marketBytes ? decodeMarketName(marketBytes) : "",
+      );
+      // The guard repays debt, so a position without any is not something it can
+      // help with. That is a different answer from "no positions found", and the
+      // interface owes the reader the difference.
+      const supported = obligation.borrows.length > 0;
+
+      return {
+        position,
+        supported,
+        unsupportedReason: supported
+          ? undefined
+          : "This position holds collateral but has no borrow, so there is no debt for the agent to repay.",
+        guard: guards.find((candidate) => candidate.obligation === obligation.address) ?? null,
+      };
+    });
+
+    const first = positions.find((entry) => entry.supported);
+    const firstObligation = obligations.find(
+      (obligation) => obligation.address === first?.position.obligation,
     );
+    const debtMint = firstObligation
+      ? reserves.get(firstObligation.borrows[0]?.reserve ?? "")?.mint
+      : undefined;
 
-    const [first] = guards;
+    const [reserveBalance, walletBalance] = await Promise.all([
+      first?.guard ? fetchTokenBalance(config, first.guard.vault) : Promise.resolve(0n),
+      debtMint ? fetchWalletBalance(config, owner, debtMint) : Promise.resolve(0n),
+    ]);
+
     return {
       now: Math.floor(Date.now() / 1000),
       owner,
       positions,
-      reserveBalance: first ? await fetchTokenBalance(config, first.vault) : 0n,
-      // The owner's own token account has to be resolved through the associated
-      // token program, which is the same missing piece as the market reader.
-      walletBalance: 0n,
+      reserveBalance,
+      walletBalance,
+      // No watcher runs against this cluster yet. Reporting null rather than a
+      // timestamp is what makes the panel say "unknown" instead of "healthy".
       watcherLastCheckAt: null,
       receipts: [],
     };
@@ -158,22 +375,68 @@ export function createChainSource(config: PlatformConfig, market: MarketReader |
 
   return {
     mode: "chain",
-    canWrite: false,
+    canWrite: PROGRAM_IS_DEPLOYED && signer !== null,
     snapshot,
-    async authorize() {
-      return NOT_DEPLOYED;
+    async authorize({ obligation, policy }) {
+      const agent = new PublicKey(DEVNET_MARKET.agent);
+      return send((accounts) => initGuardIx(accounts, agent, policy), obligation);
     },
-    async deposit() {
-      return NOT_DEPLOYED;
+
+    async deposit({ obligation, amount }) {
+      return send((accounts) => depositReserveIx(accounts, amount), obligation);
     },
-    async withdraw() {
-      return NOT_DEPLOYED;
+
+    async withdraw({ obligation, amount }) {
+      // `null` means the whole vault, expressed with the program's own sentinel so
+      // the amount does not have to be read first and cannot go stale between.
+      return send(
+        (accounts) => withdrawReserveIx(accounts, amount ?? WITHDRAW_ALL),
+        obligation,
+      );
     },
-    async setPaused() {
-      return NOT_DEPLOYED;
+
+    async setPaused({ obligation, paused }) {
+      if (signer === null) return { ok: false, failure: { kind: "wallet_unavailable" } };
+
+      // `update_policy` rewrites the whole record, so pausing means re-sending the
+      // policy that is already there. Reading it first is what keeps a pause from
+      // quietly resetting somebody's limits.
+      const guards = await fetchGuards(config, signer.address);
+      const guard = guards.find((candidate) => candidate.obligation === obligation);
+      if (!guard) {
+        return { ok: false, failure: { kind: "unknown", detail: "No authorization on that position." } };
+      }
+
+      return send(
+        (accounts) => updatePolicyIx(accounts, new PublicKey(guard.agent), guard.policy, paused),
+        obligation,
+      );
     },
-    async revoke() {
-      return NOT_DEPLOYED;
+
+    async revoke({ obligation }) {
+      return send((accounts) => revokeIx(accounts), obligation);
     },
   };
+}
+
+/**
+ * Turns a thrown wallet or RPC error into one of the failures the interface knows.
+ *
+ * A program error carries its code so the screen can name the rule that stopped it
+ * rather than saying "transaction failed".
+ */
+function asWriteFailure(error: unknown): Failure {
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (error !== null && typeof error === "object" && "code" in error && error.code === 4001) {
+    return { kind: "wallet_rejected" };
+  }
+
+  const custom = /custom program error: 0x([0-9a-f]+)/i.exec(message);
+  if (custom) return { kind: "program_error", code: parseInt(custom[1], 16) };
+
+  if (/blockhash not found|block height exceeded/i.test(message)) {
+    return { kind: "congested", retryable: true };
+  }
+  return { kind: "unknown", detail: message };
 }
