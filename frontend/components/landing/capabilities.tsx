@@ -25,14 +25,21 @@ export function Capabilities() {
 
             <ul className="mt-5 flex flex-col gap-3.5">
               {en.capabilities.can.map((item) => (
-                <li key={item} className="flex items-start gap-3">
+                <li key={item.label} className="flex items-start gap-3">
                   <Check
                     size={16}
                     weight="regular"
                     aria-hidden="true"
-                    className="mt-0.5 shrink-0 text-accent"
+                    className={`mt-0.5 shrink-0 ${"v2" in item ? "text-ink-faint" : "text-accent"}`}
                   />
-                  <span className="text-[15px] leading-snug text-ink">{item}</span>
+                  <span className="text-[15px] leading-snug text-ink">
+                    {item.label}
+                    {"v2" in item ? (
+                      <span className="num ml-2 align-middle text-[11px] text-ink-faint">
+                        {en.simulator.v2}
+                      </span>
+                    ) : null}
+                  </span>
                 </li>
               ))}
             </ul>

@@ -53,20 +53,51 @@ for (const scenario of SCENARIOS) {
   });
 }
 
-test("nulls appear only after liquidation, never before", () => {
+test("a position only reads as gone after it was liquidated, and stays gone", () => {
   for (const scenario of SCENARIOS) {
     const result = run(scenario.prices);
-    for (const branch of [result.withAgent, result.withoutAgent]) {
+    for (const branch of [result.withAgent, result.withoutAgent, result.reservePrepaid]) {
       const firstNull = branch.ltvBps.findIndex((v) => v === null);
-      if (firstNull === -1) {
-        assert.equal(branch.liquidatedAt, null);
-        continue;
-      }
-      assert.equal(firstNull, (branch.liquidatedAt ?? -1) + 1);
-      // Once the position is gone it stays gone.
-      assert.ok(branch.ltvBps.slice(firstNull).every((v) => v === null));
+      if (firstNull === -1) continue;
+
+      // Nothing else can end a position, so a null has to follow a liquidation.
+      assert.ok(branch.liquidatedAt !== null, "gone without ever being liquidated");
+      assert.ok(firstNull >= branch.liquidatedAt, "gone before the liquidation that ended it");
+      assert.ok(branch.ltvBps.slice(firstNull).every((v) => v === null), "came back from gone");
     }
   }
+});
+
+test("liquidation is partial: being liquidated does not end the position", () => {
+  // The whole point of the close factor. If every liquidation still wiped the
+  // position, the no-agent branch would keep missing every recovery and the
+  // agent would keep looking better than it is.
+  const survivors = SCENARIOS.flatMap((scenario) => {
+    const result = run(scenario.prices);
+    return [result.withAgent, result.withoutAgent].filter(
+      (branch) => branch.liquidatedAt !== null && branch.ltvBps.at(-1) !== null,
+    );
+  });
+
+  assert.ok(survivors.length > 0, "no branch survived a liquidation in any scenario");
+});
+
+test("prepaying the reserve is measured from the same starting capital", () => {
+  for (const scenario of SCENARIOS) {
+    const result = run(scenario.prices);
+
+    // It never acts, so it never pays a fee and never touches a reserve.
+    assert.equal(result.reservePrepaid.actions.length, 0);
+    assert.equal(result.reservePrepaid.feesPaid, 0);
+    assert.ok(Number.isFinite(result.reservePrepaid.finalEquity));
+  }
+
+  // Same position, same money, so at the opening price the three branches are
+  // worth the same. Any later difference is the market, not the accounting.
+  const flat = new Array(6).fill(160);
+  const result = run(flat);
+  const cents = (n: number) => Math.round(n * 100);
+  assert.equal(cents(result.reservePrepaid.finalEquity), cents(result.withoutAgent.finalEquity));
 });
 
 test("the three scenarios disagree about whether the agent helped", () => {

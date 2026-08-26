@@ -1,3 +1,4 @@
+import { en } from "@/content/en";
 import { elapsed, percentFromBps } from "@/lib/core/format";
 import type { SimulationResult } from "@/lib/core/ltv/simulate";
 
@@ -63,9 +64,19 @@ export function DataTable({
                     {withoutAgent === null ? "liquidated" : percentFromBps(withoutAgent)}
                   </td>
                   <td className="px-4 py-2 text-ink-dim">
-                    {action
-                      ? `${action.kind === "add_collateral" ? "Added collateral" : "Repaid debt"}, $${action.spent.toFixed(2)}`
-                      : ""}
+                    {action ? (
+                      <>
+                        {action.kind === "add_collateral" ? "Added collateral" : "Repaid debt"}, $
+                        {action.spent.toFixed(2)}
+                        {action.kind === "add_collateral" ? (
+                          <span className="num ml-2 text-[11px] text-ink-faint">
+                            {en.simulator.v2}
+                          </span>
+                        ) : null}
+                      </>
+                    ) : (
+                      ""
+                    )}
                   </td>
                 </tr>
               );

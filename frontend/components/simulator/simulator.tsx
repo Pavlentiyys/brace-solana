@@ -205,13 +205,20 @@ export function Simulator() {
                 <dd className="num text-ink-dim">{money(liqPrice)}</dd>
               </div>
               <div className="flex items-baseline justify-between gap-3">
-                <dt className="text-ink-faint">Your rule fires at</dt>
+                {/* Badge first. Trailing it read as "tops up collateral at v2",
+                    as though v2 were the threshold. */}
+                <dt className="text-ink-faint">
+                  <span className="num mr-2 border border-line px-1 text-[10px] text-ink-faint">
+                    {en.simulator.v2}
+                  </span>
+                  {en.simulator.ruleTopUp}
+                </dt>
                 <dd className="num text-ink-dim">
                   {percentFromBps(DEMO_RULE.steps[0].triggerLtvBps)} LTV
                 </dd>
               </div>
               <div className="flex items-baseline justify-between gap-3">
-                <dt className="text-ink-faint">Then repays at</dt>
+                <dt className="text-ink-faint">{en.simulator.ruleRepay}</dt>
                 <dd className="num text-ink-dim">
                   {percentFromBps(DEMO_RULE.steps[1].triggerLtvBps)} LTV
                 </dd>
@@ -219,6 +226,10 @@ export function Simulator() {
             </dl>
 
             <p className="mt-4 text-[12px] leading-relaxed text-ink-faint">
+              {en.simulator.v2Note}
+            </p>
+
+            <p className="mt-3 text-[12px] leading-relaxed text-ink-faint">
               The rule is fixed here because you set yours in the chat, not in a form. The
               position is yours to change.
             </p>

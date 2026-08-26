@@ -38,8 +38,12 @@ export const DEMO_RULE: Rule = {
 };
 
 export const DEMO_MARKET: MarketParams = {
-  // Extra collateral a liquidator takes on top of the debt.
+  // Extra collateral a liquidator takes on top of the debt. Kamino's band for
+  // SOL-class collateral runs 3-10%; this is the middle of it.
   liquidationPenaltyBps: 500,
+  // Kamino's default close factor: one round clears at most a quarter of the
+  // debt, and the borrower keeps the rest of the position.
+  closeFactorBps: 2_500,
   // One transaction with a priority fee, in dollars.
   feePerAction: 0.0025,
 };

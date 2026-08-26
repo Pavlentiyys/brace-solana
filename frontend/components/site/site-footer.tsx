@@ -10,13 +10,19 @@ import { site } from "@/content/site";
  * A link whose destination may not exist yet. LANDING.md section 6 asks for
  * honest statuses, so an unknown destination renders as dimmed text with a
  * reason rather than as a link that goes nowhere.
+ *
+ * The note survives once the link appears. It used to render only in place of a
+ * missing link, which meant deploying the program to devnet silently deleted the
+ * words "not on mainnet" from the page and left a bare link a reader would take
+ * for production.
  */
 function FooterItem({ label, href, note }: { label: string; href: string | null; note?: string }) {
+  const suffix = note ? <span className="text-[12px] text-ink-faint"> ({note})</span> : null;
+
   if (!href) {
     return (
       <li className="text-ink-faint">
-        {label}{" "}
-        <span className="text-[12px]">({note ?? en.footer.notYet})</span>
+        {label} <span className="text-[12px]">({note ?? en.footer.notYet})</span>
       </li>
     );
   }
@@ -32,6 +38,7 @@ function FooterItem({ label, href, note }: { label: string; href: string | null;
       >
         {label}
       </Link>
+      {suffix}
     </li>
   );
 }

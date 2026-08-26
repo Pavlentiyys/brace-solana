@@ -3,17 +3,25 @@
  * once with nobody acting. The two branches start from the same capital so the
  * comparison at the end is honest.
  *
- * Deliberate simplifications, all of which make the agent look WORSE or make no
- * difference, never better. Scenarios built on this are labelled as example
- * data in the interface.
+ * Scenarios built on this are labelled as example data in the interface.
  *
- *   - Liquidation closes the whole position. Real protocols close a fraction at
- *     a time, so a real liquidation is usually less punishing than this model.
+ * This file used to close the whole position on liquidation and claim that the
+ * simplification "makes the agent look worse, never better". That was backwards.
+ * A full close only ever hit the branch with no agent, so it deleted that
+ * branch's recovery and inflated the agent's apparent gain — by 78% in the
+ * scenario the landing page leads with. Liquidation is now partial, at Kamino's
+ * close factor, and the position keeps trading afterwards.
+ *
+ * Remaining simplifications, and which way each one leans:
+ *
  *   - The price series is the only input. No slippage, no oracle lag, no failed
- *     transactions. The failure paths are a product concern (PLATFORM.md 3.8),
- *     not something to bury inside an average.
- *   - Interest does not accrue. Over the hours these scenarios cover it is
- *     rounding error next to the price move.
+ *     transactions. Favours the agent, which never misses a fill; the failure
+ *     paths are a product concern (PLATFORM.md 3.8), not something to bury
+ *     inside an average.
+ *   - Interest does not accrue. Neutral over the hours these scenarios cover.
+ *   - Liquidators arrive the moment the position is unhealthy. Favours the
+ *     no-agent branch slightly, since a real one can drift past the threshold
+ *     before anyone acts.
  */
 
 import {
@@ -50,6 +58,12 @@ export interface Rule {
 export interface MarketParams {
   /** Extra collateral the liquidator takes, in basis points. */
   liquidationPenaltyBps: number;
+  /**
+   * Most of the debt one liquidation may repay, in basis points. Kamino's
+   * default is 2,500: a liquidator clears at most a quarter of the debt per
+   * round, and the borrower keeps the rest of the position.
+   */
+  closeFactorBps: number;
   /** Network cost of one action, in quote currency. */
   feePerAction: number;
 }
@@ -89,6 +103,16 @@ export interface SimulationResult {
   prices: number[];
   withAgent: Branch;
   withoutAgent: Branch;
+  /**
+   * The reserve spent on the debt at the start instead of parked for the agent,
+   * then nobody acts again.
+   *
+   * Without it the comparison is against a borrower who leaves money idle beside
+   * a loan they are worried about, which nobody does. This is what that money
+   * does if you simply use it, and it is the honest thing for the agent to be
+   * measured against.
+   */
+  reservePrepaid: Branch;
   liquidationPriceAtStart: number;
 }
 
@@ -98,15 +122,27 @@ function equity(position: Position, price: number, reserve: number): number {
 }
 
 /**
- * Closes the position the way a liquidator would: the debt is repaid and
- * collateral worth the debt plus the penalty is seized. What is left over stays
- * with the user.
+ * One liquidation round: a liquidator repays up to the close factor and takes
+ * collateral worth that repayment plus the penalty. The rest of the position
+ * stays open and stays the borrower's.
  */
-function liquidate(position: Position, price: number, penaltyBps: number): Position {
-  const owed = (position.debt * (BPS + penaltyBps)) / BPS;
+function liquidate(position: Position, price: number, market: MarketParams): Position {
+  const repaid = Math.min(position.debt, (position.debt * market.closeFactorBps) / BPS);
+  const owed = (repaid * (BPS + market.liquidationPenaltyBps)) / BPS;
   const seized = Math.min(position.collateral, owed / price);
-  return { ...position, collateral: position.collateral - seized, debt: 0 };
+  return {
+    ...position,
+    collateral: position.collateral - seized,
+    debt: position.debt - repaid,
+  };
 }
+
+/**
+ * A liquidator can come back in the next block, so several rounds can land on
+ * one price. The bound is a stop, not a model: a position far enough underwater
+ * that seizing collateral raises its LTV would otherwise never converge.
+ */
+const MAX_LIQUIDATION_ROUNDS = 8;
 
 function runBranch(input: SimulationInput, agentActive: boolean): Branch {
   const { prices, rule, market } = input;
@@ -122,7 +158,10 @@ function runBranch(input: SimulationInput, agentActive: boolean): Branch {
   for (let i = 0; i < prices.length; i++) {
     const price = prices[i];
 
-    if (liquidatedAt !== null) {
+    // No freeze after a liquidation. A partial close leaves a position that
+    // keeps moving with the price, and an agent with reserve left keeps acting
+    // on it.
+    if (position.debt <= 0 || position.collateral <= 0) {
       ltvSeries.push(null);
       continue;
     }
@@ -172,16 +211,23 @@ function runBranch(input: SimulationInput, agentActive: boolean): Branch {
       }
     }
 
-    const current = ltvBps(position, price);
-
-    if (current >= position.liquidationLtvBps && position.debt > 0) {
-      position = liquidate(position, price, market.liquidationPenaltyBps);
-      liquidatedAt = i;
-      ltvSeries.push(current);
-      continue;
+    let rounds = 0;
+    while (
+      position.debt > 0 &&
+      position.collateral > 0 &&
+      ltvBps(position, price) >= position.liquidationLtvBps &&
+      rounds < MAX_LIQUIDATION_ROUNDS
+    ) {
+      position = liquidate(position, price, market);
+      // The first one is what the interface marks. Later rounds are the same
+      // event continuing, not new ones.
+      if (liquidatedAt === null) liquidatedAt = i;
+      rounds += 1;
     }
 
-    ltvSeries.push(current);
+    ltvSeries.push(
+      position.debt > 0 && position.collateral > 0 ? ltvBps(position, price) : null,
+    );
   }
 
   return {
@@ -195,10 +241,23 @@ function runBranch(input: SimulationInput, agentActive: boolean): Branch {
 }
 
 export function simulate(input: SimulationInput): SimulationResult {
+  // Anything the reserve cannot repay stays a reserve, so the three branches
+  // still start from the same capital and the comparison stays honest.
+  const applied = Math.min(input.reserve, input.position.debt);
+
   return {
     prices: input.prices,
     withAgent: runBranch(input, true),
     withoutAgent: runBranch(input, false),
+    reservePrepaid: runBranch(
+      {
+        ...input,
+        position: { ...input.position, debt: input.position.debt - applied },
+        reserve: input.reserve - applied,
+        rule: { steps: [], cooldown: input.rule.cooldown },
+      },
+      false,
+    ),
     liquidationPriceAtStart:
       (input.position.debt * BPS) /
       (input.position.collateral * input.position.liquidationLtvBps),

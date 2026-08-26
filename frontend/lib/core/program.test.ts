@@ -18,6 +18,7 @@ import {
   guardErrorCode,
 } from "./program";
 import { ACCOUNT_ORDER } from "./tx/instructions";
+import { site } from "@/content/site";
 
 /**
  * `program.ts` is a copy of the Rust, and a copy nobody checks is a copy that is
@@ -51,6 +52,29 @@ interface Idl {
   accounts: { name: string; discriminator: number[] }[];
   errors: { code: number; name: string }[];
 }
+
+/**
+ * The footer publishes this address as the thing a reader can go and check.
+ * It used to hold its own copy, which stayed on Anchor's placeholder through
+ * the devnet deploy — so the one verifiable claim on the site pointed at an
+ * empty account. Deriving it fixed that; this test keeps it derived.
+ */
+test("the published program id is the program id", () => {
+  assert.equal(site.program.id, PROGRAM_ID);
+  assert.equal(site.program.deployed, PROGRAM_IS_DEPLOYED);
+});
+
+test("a deployed program is published with somewhere to check it", () => {
+  if (!PROGRAM_IS_DEPLOYED) {
+    assert.equal(site.program.explorerUrl, null, "nothing to link to yet");
+    return;
+  }
+  assert.ok(site.program.explorerUrl, "deployed, so the footer needs a real link");
+  assert.ok(
+    site.program.explorerUrl.includes(PROGRAM_ID),
+    "the link has to point at this program, not another one",
+  );
+});
 
 const idlSource = read(IDL_PATH);
 const stateSource = read(STATE_PATH);

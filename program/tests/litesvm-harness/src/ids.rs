@@ -7,8 +7,13 @@
 use solana_pubkey::Pubkey;
 
 /// Matches `declare_id!` in `programs/guard/src/lib.rs`.
+///
+/// Renewed when the program was deployed to devnet. Until then this was Anchor's
+/// placeholder, and the whole suite failed with Anchor's 4100
+/// (`DeclaredProgramIdMismatch`) rather than reaching any guard logic — which is
+/// what the restating above is for.
 pub const GUARD_PROGRAM_ID: Pubkey =
-    Pubkey::from_str_const("Fg6PaFpoGXkYsidMpWxTWqkZpY6W2BeZ7FEfcYkgMQbS");
+    Pubkey::from_str_const("CCSVvtVuDpH1wCCQWExCpdmZ1sqUBabJA1QQGai7aVaY");
 pub const KLEND_PROGRAM_ID: Pubkey =
     Pubkey::from_str_const("KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD");
 pub const FARMS_PROGRAM_ID: Pubkey =

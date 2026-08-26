@@ -70,8 +70,19 @@ function BranchColumn({
   );
 }
 
+function Difference({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 px-5 py-3">
+      <span className="text-[12px] text-ink-dim">{label}</span>
+      <span className={cn("num text-lg", value < 0 ? "text-state-danger" : "text-ink")}>
+        {moneySigned(value)}
+      </span>
+    </div>
+  );
+}
+
 export function Outcome({ result }: { result: SimulationResult }) {
-  const difference = result.withAgent.finalEquity - result.withoutAgent.finalEquity;
+  const prepaid = result.reservePrepaid;
 
   return (
     <div>
@@ -92,16 +103,33 @@ export function Outcome({ result }: { result: SimulationResult }) {
         />
       </div>
 
-      <div className="mt-4 flex items-baseline justify-between gap-4 rounded-panel border border-line px-5 py-4">
-        <span className="text-[12px] text-ink-dim">{en.simulator.difference}</span>
-        <span
-          className={cn(
-            "num text-xl",
-            difference < 0 ? "text-state-danger" : "text-ink",
-          )}
-        >
-          {moneySigned(difference)}
-        </span>
+      {/*
+        Its own row rather than a third column. This is a different question from
+        the other two - not "did the agent act" but "what if you had spent the
+        money instead" - and three columns in this width could not hold the
+        numbers legibly anyway.
+      */}
+      <div className="mt-4 rounded-panel border border-line px-5 py-4">
+        <div className="flex items-baseline justify-between gap-4">
+          <p className="text-[11px] text-ink-faint">{en.simulator.reservePrepaid}</p>
+          <p className="num text-2xl leading-none text-ink-dim">
+            {moneyWhole(prepaid.finalEquity)}
+          </p>
+        </div>
+        <p className="mt-3 text-[12px] leading-relaxed text-ink-faint">
+          {en.simulator.reservePrepaidNote}
+        </p>
+      </div>
+
+      <div className="mt-4 divide-y divide-line overflow-hidden rounded-panel border border-line">
+        <Difference
+          label={en.simulator.vsNothing}
+          value={result.withAgent.finalEquity - result.withoutAgent.finalEquity}
+        />
+        <Difference
+          label={en.simulator.vsPrepaid}
+          value={result.withAgent.finalEquity - prepaid.finalEquity}
+        />
       </div>
     </div>
   );

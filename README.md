@@ -15,8 +15,8 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Kamino](https://img.shields.io/badge/Kamino-devnet%20live-4b8fff)](https://kamino.finance)
 
-[![Tests](https://img.shields.io/badge/tests-255%20passing-3fb950)](#testing)
-[![Program](https://img.shields.io/badge/program-not%20deployed-d29922)](#status)
+[![Tests](https://img.shields.io/badge/tests-300%20passing-3fb950)](#testing)
+[![Program](https://img.shields.io/badge/program-devnet-4b8fff)](#status)
 [![Audit](https://img.shields.io/badge/audit-required-f85149)](#status)
 [![License](https://img.shields.io/badge/license-MIT-8a9099)](#license)
 
@@ -51,13 +51,20 @@ The guarantee is structural, not a promise:
 
 ### Status
 
-The program is **not deployed**. `declare_id!` still holds Anchor's placeholder, so
-every write in the app returns `program_not_deployed` and says so on screen rather
-than opening a wallet prompt that cannot succeed.
+The program is **deployed on devnet** at
+[`CCSVvtVuDpH1wCCQWExCpdmZ1sqUBabJA1QQGai7aVaY`](https://solscan.io/account/CCSVvtVuDpH1wCCQWExCpdmZ1sqUBabJA1QQGai7aVaY?cluster=devnet).
+It is **not on mainnet**, and it has **not been audited**.
 
-**Reading works today.** Tracking a Kamino position needs nothing of ours deployed,
-because the obligations are Kamino's accounts. Connect Phantom on devnet and the app
-finds every position your address holds.
+Everything downstream of that address is derived from `lib/core/program.ts` rather
+than restated, because the first deploy left three copies of it behind: the site
+footer, the app, and the LiteSVM harness. Two of them stayed on Anchor's
+placeholder — the harness loudly, with all 22 negative-case tests failing on
+Anchor's 4100, and the footer quietly, publishing an address with nothing on it.
+Tests now assert both against `declare_id!`.
+
+**Reading works without any of it.** Tracking a Kamino position needs nothing of
+ours deployed, because the obligations are Kamino's accounts. Connect Phantom on
+devnet and the app finds every position your address holds.
 
 **An audit is required before this takes real funds.** Nothing in this repository
 substitutes for one.
@@ -219,7 +226,7 @@ mislead them about their own money, so it is not offered.
 |---|---:|---|
 | `program` unit + proptest | 42 | Policy validation, LTV maths, shared vectors, the two fuzz properties |
 | `program` LiteSVM | 45 | Every negative case as a real transaction, layout regressions, real KLend |
-| `frontend` | 168 | LTV contract, guard state, the Kamino decoder, the bot |
+| `frontend` | 213 | LTV contract, guard state, the Kamino decoder, the bot, the published program id |
 
 Two things worth calling out.
 
@@ -262,14 +269,17 @@ borrow, so nobody can open a position on somebody else's behalf.
   that does nothing.
 - **`init_guard` requires an existing borrow** in the configured reserve, and an
   obligation that has been refreshed.
-- **No watcher runs yet**, so the panel reports the last check as unknown rather than
-  as healthy.
-- **No transaction assembly.** The instruction bytes are in `lib/core/tx`; the
-  assembler goes next to them once there is a deployed program to sign against.
-- **The agent does not always help.** Repaying into a fall with no rebound spends the
-  reserve and delays liquidation rather than preventing it. The simulator on the
-  landing page reproduces all three cases, including the two where the rule costs you
-  money.
+- **No watcher runs yet.** `lib/core/liveness.ts` models the staleness the panel
+  reports, but nothing is calling the chain on a schedule, so the last check reads
+  as unknown rather than as healthy.
+- **The agent does not always help**, and the simulator is built to show it. The
+  landing page runs three branches: the agent acting, nobody acting, and the same
+  reserve spent on the debt up front. That third branch is the honest comparison —
+  nobody leaves money idle beside a loan they are worried about — and the agent
+  loses to it in the fall with no rebound.
+- **Liquidation is modelled at Kamino's 25% close factor.** An earlier version
+  closed the whole position, which only ever hit the branch with no agent and
+  overstated what the agent was worth by 78% in the scenario the page leads with.
 
 ## License
 

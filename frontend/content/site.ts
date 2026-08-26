@@ -7,23 +7,31 @@
  * placeholder that reads as fact.
  */
 
+import { PROGRAM_ID, PROGRAM_IS_DEPLOYED } from "@/lib/core/program";
+import { programExplorerUrl, readConfig } from "@/lib/platform/config";
+
 export const site = {
   name: "Brace",
   /** Used for metadata and OG cards. Set to the real domain before launch. */
   url: "https://brace.fi",
   tagline: "The agent executes your rule when your position moves toward liquidation.",
 
+  /**
+   * Derived, never restated. This block held its own copy of the address, and
+   * when the program was deployed the copy stayed on Anchor's placeholder — so
+   * the footer pointed the public at an address with nothing on it, on the one
+   * page whose whole claim is that the guarantees are checkable.
+   *
+   * `program.test.ts` asserts the id here still equals `PROGRAM_ID`, so a
+   * second divergence is a failing test rather than a live page.
+   */
   program: {
-    /**
-     * Anchor's public placeholder ID. The program has not been deployed, so
-     * there is nothing to link to on an explorer yet. `explorerUrl` stays null
-     * until a real address exists: a link to a placeholder address would be
-     * worse than no link.
-     */
-    id: "Fg6PaFpoGXkYsidMpWxTWqkZpY6W2BeZ7FEfcYkgMQbS",
-    deployed: false,
-    status: "Not deployed. Localnet only.",
-    explorerUrl: null as string | null,
+    id: PROGRAM_ID,
+    deployed: PROGRAM_IS_DEPLOYED,
+    // Short enough to sit beside the link as a parenthetical, and it has to say
+    // "not mainnet": the link alone reads as production.
+    status: PROGRAM_IS_DEPLOYED ? "devnet, not mainnet" : "not deployed, localnet only",
+    explorerUrl: programExplorerUrl(readConfig()),
   },
 
   audit: {

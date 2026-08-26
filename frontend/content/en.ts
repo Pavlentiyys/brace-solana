@@ -50,13 +50,28 @@ export const en = {
     resultHeading: "Outcome at the last price",
     withAgent: "With the agent",
     withoutAgent: "With no agent",
+    reservePrepaid: "Reserve repaid up front",
+    reservePrepaidNote:
+      "The same reserve spent on the debt at the start, then nobody acts again. It is the comparison that matters, because leaving the money idle beside a loan is not what anyone actually does with it.",
+    vsNothing: "Against leaving the reserve idle",
+    vsPrepaid: "Against repaying with it instead",
     reserveLeft: "Reserve left",
     feesPaid: "Network fees",
     actionsTaken: "Actions taken",
     liquidated: "Liquidated",
     survived: "Not liquidated",
     liquidatedAt: "Liquidated at",
-    difference: "Difference",
+    /**
+     * The demo rule tops up collateral before it repays, because that is the
+     * two-step rule PLATFORM.md 3.3 describes. The deployed program refuses it:
+     * `policy.ts` rejects anything but repayment in v1. Rather than quietly
+     * rewriting the demo, the step that cannot be authorized yet says so.
+     */
+    ruleTopUp: "Tops up collateral at",
+    ruleRepay: "Repays debt at",
+    v2: "v2",
+    v2Note:
+      "Topping up collateral arrives in v2: it needs a signature from you on every action. The deployed program repays debt and nothing else, so a rule with a top-up step cannot be authorized yet.",
     chart: {
       price: "Price",
       ltvWithAgent: "LTV with the agent",
@@ -86,9 +101,11 @@ export const en = {
   capabilities: {
     heading: "What the agent can and cannot do",
     canHeading: "Can",
+    // `v2` marks an action the deployed program does not accept yet. Listing it
+    // unmarked under "Can" promised something `policy.ts` rejects.
     can: [
-      "Add collateral from your reserve",
-      "Repay part of your debt from your reserve",
+      { label: "Repay part of your debt from your reserve" },
+      { label: "Add collateral from your reserve", v2: true },
     ],
     canConstraints: [
       "Only once your LTV reaches the threshold you set",
@@ -112,19 +129,16 @@ export const en = {
       {
         title: "The reserve runs out",
         body: "The rule can only spend what you put in. When the reserve is empty the agent stops acting and your position carries on falling without it.",
-        figure: "$0",
         figureLabel: "reserve left after three actions in the third scenario",
       },
       {
         title: "A fall with no rebound",
         body: "Topping up converts your reserve into the asset that is falling. It delays liquidation and it can leave you with less than doing nothing at all.",
-        figure: "-$2,014",
         figureLabel: "worse off with the agent in the third scenario",
       },
       {
         title: "A spike that reverses",
         body: "The rule fires on a threshold, not on a forecast. A move that reverses within the hour still spends the reserve and still pays the fees.",
-        figure: "$711.74",
         figureLabel: "spent in the second scenario on a position that was never at risk",
       },
     ],
@@ -134,7 +148,7 @@ export const en = {
     heading: "Getting started",
     cta: "Open the app",
     ctaNote:
-      "The app is the third step. It runs against a demo world until the program is deployed, and it says so on every screen.",
+      "The app is the third step. Without a wallet it opens a demo world you can make fail on purpose. With Phantom on devnet it reads your own Kamino positions.",
     steps: [
       {
         title: "Connect a read only address",
@@ -184,10 +198,14 @@ export const en = {
     },
     demoBanner: {
       title: "This is a demo",
+      // Two different causes, and the banner has to name the right one. This
+      // first line used to blame the deployment, which stayed in the copy after
+      // the program went to devnet and became the wrong reason as well as an
+      // untrue one.
       notConfigured:
-        "The program is not deployed, so this app runs against a world in your browser. The price moves, the rule fires, the reserve goes down. Nothing here touches a chain and no receipt has a transaction to link to.",
+        "No RPC endpoint is configured, so this app runs against a world in your browser. The price moves, the rule fires, the reserve goes down. Nothing here touches a chain and no receipt has a transaction to link to.",
       programNotDeployed:
-        "An RPC endpoint is configured, but the program id is still the placeholder in the source, so there is nothing to read. Until the program is deployed the app runs against a world in your browser.",
+        "An RPC endpoint is configured, but the program id it is pointed at has nothing deployed behind it, so there is nothing to read. Until that changes the app runs against a world in your browser.",
       /**
        * Shown only once a browser wallet is connected. Without it the banner reads
        * as though the address is fake too, and a user who then recognises their own
