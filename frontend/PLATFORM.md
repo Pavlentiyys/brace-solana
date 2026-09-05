@@ -1,166 +1,351 @@
-> Часть 2 из 2, редакция 2. Парный документ — «ТЗ: ончейн-программа».
-> Изменение против редакции 1: архитектура стала chat-first. Конструктор правила формой удалён, его заменяет диалог в боте. Веб оставлен только для того, что требует подписи кошельком.
-> Название продукта не закреплено (кандидаты: Brace, Belay, Freeboard). В тексте — «Агент».
+# Brace Frontend Platform
 
-# ТЗ: фронтенд (веб + Telegram-бот)
+Brace is a chat-first web application for inspecting Kamino positions, modeling
+liquidation scenarios, configuring a repayment guard, and signing the owner-only
+operations that control it.
 
----
+This document describes the implemented browser platform and separates it from the
+services that are still planned.
 
-## 1. Разделение ответственности
+## Current status
 
-**Бот — основной интерфейс.** Наблюдение, объяснение, настройка правила, отчёты, управление. Всё, что не требует подписи транзакции.
-
-**Веб — только подпись и приборная панель.** Четыре операции требуют кошелька и потому живут в вебе: выдача полномочий, пополнение резерва, вывод резерва, отзыв. Плюс подробный просмотр состояния.
-
-Причина такого разделения: барьер входа. Ступень 0 (бот только читает) не требует ни ключей, ни доверия, и на неё человек соглашается мгновенно. Веб появляется в жизни пользователя только тогда, когда он уже понял ценность.
-
-**Три ступени продукта.** Ступень 0 — бот наблюдает и объясняет. Ступень 1 — бот при достижении порога присылает готовую транзакцию, пользователь жмёт один раз. Ступень 2 — полномочия выданы, правило исполняется само. Экраны ниже помечены ступенью.
-
----
-
-## 2. Экраны: веб
-
-### 2.1. Симулятор (публичный, без кошелька) · ступень 0
-
-Точка входа. Пользователь задаёт гипотетическую позицию или берёт готовый пример, выбирает исторический сценарий, видит результат.
-
-График: цена, LTV, порог ликвидации, момент срабатывания правила. Рядом два числа — капитал без агента и с агентом.
-
-**Обязательный элемент:** сценарий, где правило сработало во вред (короткий прокол цены с последующим отскоком), переключателем рядом с основным, не сноской. И сценарий, где резерв кончается и агент лишь отодвигает развязку.
-
-### 2.2. Подключение и поиск позиции · ступень 2
-
-Wallet-adapter. После подключения — поиск обязательств пользователя в поддерживаемом протоколе.
-
-Состояния: позиции найдены (список с текущим LTV); позиций нет (объяснить, что сначала нужно занять, ссылка на протокол); позиция есть, но актив не поддерживается.
-
-### 2.3. Выдача полномочий · ступень 2
-
-Единственное, чего нельзя сделать в чате: `init_guard` требует подписи.
-
-Экран показывает **перечень возможностей агента явно и проверяемо**: два разрешённых действия, лимит на сумму, пауза, срок истечения. Отдельной строкой — чего он не может, со ссылкой на программу в обозревателе: инструкции перевода на произвольный адрес в списке нет.
-
-Срок полномочий выводится датой, не длительностью: «полномочия закончатся 19 ноября» работает на доверие лучше, чем «90 дней».
-
-### 2.4. Пополнение резерва · ступень 2
-
-Сколько нужно минимум для одного срабатывания при текущем правиле; сколько для покрытия падения на 20 / 30 / 40 процентов. Явно: резерв забирается в любой момент, эта операция не блокируется ничем.
-
-### 2.5. Панель позиции · ступени 0–2
-
-Сверху — текущий LTV с расстоянием до порога срабатывания и до ликвидации. Читается за полсекунды с телефона.
-
-Ниже: остаток резерва и на сколько срабатываний хватит; счётчик действий в окне; обратный отсчёт до истечения полномочий; статус агента.
-
-**Индикатор живости обязателен.** «Последняя проверка: 4 секунды назад» с явной сменой состояния при отставании. Если наблюдатель встал, пользователь узнаёт об этом из интерфейса, а не из ликвидации.
-
-Действующее правило — только просмотр, обычным текстом, с кнопкой «изменить в чате».
-
-Постоянно доступны: пауза, отзыв, вывод резерва.
-
-### 2.6. История и квитанции · ступени 1–2
-
-Список срабатываний. Каждое: что сделано, сумма, LTV до и после, ссылка на транзакцию, отметка времени.
-
-Формулировка: «долив 120 USDC, LTV 73.1% → 64.8%». Никаких «мы спасли вашу позицию» — продукт исполняет правило пользователя, и язык это удерживает, в том числе на случай неудачного исполнения.
-
----
-
-## 3. Экраны: бот
-
-### 3.1. Онбординг · ступень 0
-
-Привязка адреса **только на чтение**. Ключей не требует. Пользователь вставляет адрес или подписывает сообщение для доказательства владения — без транзакции.
-
-### 3.2. Обзор позиции · ступень 0
-
-По запросу и по расписанию. Состояние человеческим языком: сколько залога, сколько долга, при какой цене ликвидация, сколько до неё в процентах.
-
-Отвечает на вопросы вида «что будет, если SOL упадёт на 20%» — расчёт по той же формуле, что в программе.
-
-### 3.3. Диалог настройки правила · ступень 0, центральный экран
-
-Бот спрашивает **заранее**, пока рынок спокоен:
-
-> — SOL сейчас $200, ваш LTV 50%. Ликвидация при $125. Что делать, если ночью дойдёт до $140?
-> — Долей $500 из резерва.
-> — А если после этого продолжит падать до $130?
-> — Тогда гаси половину долга.
-
-Свободный ответ разбирается в структуру `{trigger, action, amount, target}`. Диалог покрывает минимум две ступени порога, потому что одного правила на весь путь падения недостаточно.
-
-Это лучший конструктор правил, чем форма: ответить «что делать, если упадёт до 140» человеку легче, чем заполнить поле «trigger LTV в базисных пунктах».
-
-**Обработка непонятого ответа:** бот переспрашивает конкретно, а не показывает ошибку. Никогда не додумывает параметр молча.
-
-### 3.4. Подтверждение правила · ступень 0
-
-Пересказ своими словами плюс **предупреждение о сценарии, в котором это правило сработает во вред**, посчитанное для конкретных введённых значений. Ссылка на веб для подписи.
-
-### 3.5. Сигнал с готовой транзакцией · ступень 1
-
-Порог достигнут. Транзакция уже собрана, deep link открывает Phantom с подставленными параметрами. Одно нажатие.
-
-Сообщение содержит: что произошло, что предлагается сделать, что будет, если не нажать. Срок годности ссылки — транзакция протухает, и об этом надо сказать.
-
-### 3.6. Отчёт о срабатывании · ступень 2
-
-Что сделано, сумма, LTV до и после, ссылка на транзакцию. **Отчёт, а не просьба отреагировать.** Если пользователю надо что-то делать по уведомлению, продукт не сработал.
-
-### 3.7. Управление · ступени 1–2
-
-Пауза, изменение правила, отзыв. **Отзыв срабатывает одной командой без уточняющих вопросов** — пользователь должен видеть выход прежде, чем решится войти.
-
-### 3.8. Деградация · все ступени
-
-Три случая, требующие внимания: резерв кончился; полномочия истекают через семь дней; **попытка действия не удалась**.
-
-Последний — худший сценарий продукта и обычно забывается в проектировании. Наблюдатель попытался, транзакция не прошла. Пользователь обязан узнать немедленно и заметно, а не найти потом в истории.
-
----
-
-## 4. Данные
-
-| Что | Источник |
+| Area | Status |
 |---|---|
-| Состояние позиции, LTV | RPC, подписка на аккаунт обязательства |
-| Конфигурация, резерв | RPC, аккаунты программы |
-| История срабатываний | События программы через индексатор |
-| Цена | Тот же источник, что использует протокол |
-| Данные симулятора | Исторические цены и события ликвидаций, выгружены заранее |
-| Статус наблюдателя | Эндпоинт с меткой времени последней проверки |
+| Landing page and simulator | Implemented |
+| Browser chat and deterministic commands | Implemented |
+| Demo wallet and failure simulation | Implemented |
+| Phantom connection and devnet reads | Implemented |
+| Guard authorization, reserve, pause, and revoke transactions | Implemented |
+| Devnet faucet and test-position flow | Implemented |
+| Hosted watcher and public liveness endpoint | Not provided |
+| Indexed on-chain action history | Not provided |
+| Telegram bot | Product direction, not implemented in this repository |
+| Mainnet support | Not deployed or supported |
 
-Формула LTV существует в четырёх реализациях: программа, наблюдатель, веб, бот. **Общий набор тестовых векторов обязателен для всех четырёх.** Расхождение в третьем знаке превращается в ложные тревоги у пользователя.
+The frontend must not imply that a planned service is live. Unknown watcher status,
+missing indexed history, and unsupported actions are rendered as explicit states.
 
----
+## Product principles
 
-## 5. Стек
+### 1. Explain authority before asking for it
 
-Next.js на App Router, TypeScript. `@solana/wallet-adapter`, Anchor TS-клиент из IDL — транзакции руками не собираются. TanStack Query с инвалидацией по WebSocket. Tailwind, shadcn/ui, Recharts.
+The user should be able to answer two questions before signing:
 
-Бот: grammY или Telegraf, тот же TypeScript-монорепозиторий, общий пакет с расчётом LTV и сборкой транзакций — переиспользование обязательно, иначе реализации разойдутся.
+- What can the delegated agent do?
+- What can it never do?
 
-Разбор свободного ответа в 3.3: начать с детерминированного парсера на шаблонах, языковую модель подключать только для непонятых случаев. Модель не должна быть в критическом пути настройки правила.
+The authorization screen builds its capability list from constants mirrored from the
+program and pinned by tests. The current program permits repayment only. Collateral
+top-up is marked as v2 and cannot be authorized by the current UI.
 
-Мобильный вид — основной сценарий, панель проектируется от узкого экрана.
+### 2. Keep wallet operations narrow
 
----
+Reading a public Kamino obligation does not require a signature. The wallet is used
+only when an operation changes state:
 
-## 6. Обработка ошибок
+- create or update an authorization;
+- fund the reserve;
+- withdraw the reserve;
+- pause, resume, or revoke the guard;
+- open and refresh a test position on devnet.
 
-Отдельный сценарий на каждый: отказ в кошельке; недостаточно средств; RPC недоступен (деградированное состояние, не пустой экран); цена устарела (баннер о возможной неточности); транзакция не прошла из-за перегрузки (повтор с повышенной приоритетной комиссией, объяснение простым языком); полномочия истекли во время сессии; бот не понял ответ (переспросить конкретно).
+Every proposed action is described before the wallet opens.
 
----
+### 3. Never hide degraded states
 
-## 7. Приёмка
+An unavailable RPC, stale position, exhausted reserve, expired authorization,
+rejected wallet request, or failed transaction must produce a specific visible state.
+The interface never turns a failed read into an empty or reassuring dashboard.
 
-- Симулятор работает без кошелька и показывает оба типа неблагоприятных исходов
-- Отзыв доступен одной командой в боте и одним кликом в вебе, без цепочки подтверждений
-- Вывод резерва проходит при отозванных полномочиях, истёкшем сроке и активной паузе
-- LTV совпадает во всех четырёх реализациях на общих векторах
-- Панель читается на экране 375px без горизонтальной прокрутки
-- Отставание наблюдателя более 60 секунд отражается в интерфейсе
-- Каждое срабатывание имеет квитанцию со ссылкой на транзакцию
-- Диалог настройки не создаёт правило при непонятом ответе
+### 4. Do not promise safety or profitability
 
-Критерий, проверяемый на живых людях: **человек, впервые открывший продукт, должен за минуту объяснить своими словами, что агент может сделать с его деньгами и чего не может.** Если не может — интерфейс не выполнил главную задачу, как бы он ни выглядел.
+Brace executes a policy; it does not predict prices. The simulator includes scenarios
+where the reserve is exhausted or acting is worse than repaying earlier. Product copy
+reports what happened without claiming that Brace "saved" a position.
+
+## Runtime worlds
+
+The application has two data sources behind one interface.
+
+### Demo world
+
+The demo world runs entirely in the browser tab:
+
+- no extension or credentials are required;
+- no RPC request or transaction is submitted;
+- policy changes and receipts are simulated;
+- state resets on reload or through the reset control;
+- failure controls can force RPC, watcher, reserve, expiry, and transaction errors.
+
+The demo banner is persistent. Demo receipts never link to a block explorer because
+they do not have transaction signatures.
+
+### Chain world
+
+When an injected wallet is used, the application reads the connected address's real
+Kamino accounts from the configured Solana cluster.
+
+The supported deployment is devnet:
+
+- Kamino obligations, reserves, and market names are read over JSON-RPC;
+- guard accounts are read from the deployed Brace program;
+- signed operations use the injected wallet;
+- explorer links include the devnet query;
+- a dedicated RPC URL is recommended for polling.
+
+The demo and chain worlds never mix. A real wallet is not shown a fabricated position
+under its own address.
+
+## Information architecture
+
+### Public site
+
+| Route | Purpose |
+|---|---|
+| `/` | Product explanation, live simulator, limitations, and entry point |
+| `/docs` | Documentation overview |
+| `/docs/getting-started` | First-use flow |
+| `/docs/exit` | How to revoke and withdraw |
+
+The public site is written for a borrower who already understands LTV. Security
+boundaries and limitations appear before marketing claims.
+
+### Application
+
+| Route | Purpose |
+|---|---|
+| `/app` | Chat-first position overview and command entry point |
+| `/app/authorize` | Review and sign a guard policy |
+| `/app/reserve` | Fund or withdraw the guard reserve |
+| `/app/history` | Display available action receipts |
+| `/app/faucet` | Request devnet SOL |
+
+The application is designed mobile-first and must remain usable at 375 px without
+horizontal page scrolling.
+
+## Core user flows
+
+### Explore without a wallet
+
+1. Open the landing page.
+2. Change collateral, debt, reserve, or market scenario inputs.
+3. Compare the position with the agent, without the agent, and with the reserve
+   repaid up front.
+4. Open `/app` with the demo wallet.
+5. Trigger failure states deliberately before connecting a real wallet.
+
+### Inspect a real position
+
+1. Connect Phantom or another compatible injected Solana wallet.
+2. Confirm that the application is pointed at devnet.
+3. The chain source discovers Kamino obligations owned by the connected address.
+4. Reserve and market accounts are decoded into a position snapshot.
+5. Stale values are labeled before LTV is presented.
+
+Connecting exposes only the public address. It does not grant agent authority or move
+funds.
+
+### Authorize a guard
+
+1. Select a supported obligation with an existing borrow.
+2. Enter or confirm the trigger, target, action cap, window, cooldown, and expiry.
+3. Validate the policy against the same limits mirrored from the program.
+4. Show what the agent can and cannot do.
+5. Build `init_guard` with the configured devnet agent.
+6. Ask the owner wallet to sign and send.
+
+If the canonical guard PDA already exists, the UI reports that the position is
+already authorized instead of opening a transaction that is expected to fail.
+
+### Fund and withdraw the reserve
+
+Deposits and withdrawals are owner-signed operations. Amounts are parsed as decimal
+strings and converted to native token units without floating-point rounding.
+
+`null` withdrawal amount means "withdraw everything" and is encoded as the program's
+`u64::MAX` sentinel. The program resolves the current vault balance on chain, so the
+UI does not need to trust a balance read that may become stale before signing.
+
+### Pause, resume, and revoke
+
+Pausing uses `update_policy` and resends the currently stored policy so limits are not
+silently reset. Revocation is a distinct one-step operation.
+
+The position panel keeps pause, revoke, and reserve withdrawal visible. The exit path
+must not be hidden behind a confirmation chain or account-retention flow.
+
+### Open a devnet test position
+
+The repository contains a dedicated KLend devnet market because existing public
+devnet markets do not provide usable collateral that the project can distribute.
+
+The test-position UI can:
+
+1. deposit the project's devnet collateral;
+2. borrow the configured debt asset;
+3. refresh the obligation so the application can read current aggregate values.
+
+Each step is signed by the obligation owner because KLend requires that authority.
+
+## Browser chat
+
+The `/app` conversation maps plain-language requests and slash commands to the same
+screens used by direct navigation.
+
+Supported deterministic intents include:
+
+- positions and status;
+- reserve management;
+- authorization;
+- history;
+- pause and resume;
+- revoke;
+- wallet and help.
+
+When an input does not match a known command, the assistant lists what it understands
+instead of guessing an operation that could move funds.
+
+Free-form questions may use the server-side `/api/chat` route. Gemini is attempted
+when its server credential is configured, with Agent Router as the fallback. API keys
+are never exposed through `NEXT_PUBLIC_*` variables.
+
+Model output is not trusted as transaction data. Proposed actions are parsed into a
+strict schema, normalized, and checked against program policy constraints before any
+wallet prompt is shown.
+
+Chats are stored in browser storage and can be deleted locally. They are bounded in
+length so an old thread cannot grow without limit.
+
+## Data architecture
+
+| Data | Current source |
+|---|---|
+| Kamino obligations and LTV inputs | Solana JSON-RPC account reads |
+| Reserve and lending market metadata | Solana JSON-RPC account reads |
+| Brace guard configuration | Brace program accounts |
+| Guard reserve balance | SPL token account balance |
+| Connected wallet balance | Sum of token accounts for the debt mint |
+| Simulator inputs | Committed deterministic scenarios |
+| Demo receipts | In-browser demo state |
+| Chain receipts | Not indexed yet |
+| Watcher status | Unknown until a hosted liveness source exists |
+
+Kamino accounts are treated as untrusted bytes. Decoders check discriminators, minimum
+lengths, and expected layouts before producing UI values.
+
+## Shared LTV contract
+
+The program and frontend consume the same vectors from
+[`../program/vectors/ltv-bps.json`](../program/vectors/ltv-bps.json).
+
+Exact on-chain values use `bigint` and truncate after scaling by basis points. The
+historical simulator accepts estimated floating-point inputs and rounds to the nearest
+basis point to avoid showing a one-basis-point improvement caused only by binary float
+representation.
+
+Tests pin both behaviors and keep exact account data separate from simulation data.
+
+## Frontend architecture
+
+```text
+app/                     Next.js routes and server API
+components/
+  landing/               public product sections
+  simulator/             scenario controls, chart, and results
+  chat/                  conversation and action proposals
+  app/                   wallet-connected product screens
+lib/
+  core/                  framework-free LTV, policy, guard, and encoding logic
+  platform/              RPC, Kamino decoding, wallet, transactions, and data sources
+  chat/                  deterministic commands, parsing, threads, and engine
+  scenarios/             committed simulator scenarios
+content/                 centralized English product copy
+```
+
+The boundary is deliberate:
+
+- `lib/core` does not import React, wallet code, or `@solana/web3.js`;
+- chain and demo sources implement the same `GuardSource` interface;
+- transaction data encoding is tested separately from wallet integration;
+- program constants, discriminators, account order, and errors are pinned against the
+  committed IDL and Rust source.
+
+## Technology stack
+
+| Area | Technology |
+|---|---|
+| Framework | Next.js 16 App Router and React 19 |
+| Language | TypeScript 5 |
+| Styling | Tailwind CSS 4 with project-specific components |
+| Data cache | TanStack Query 5 |
+| Wallet and transactions | Injected wallet boundary and `@solana/web3.js` 1.98 |
+| Documentation | MDX |
+| Motion | Motion 13 |
+| Tests | Node test runner through `tsx` |
+
+The application does not use `@solana/wallet-adapter` or the Anchor browser client.
+Reads are plain JSON-RPC; `@solana/web3.js` is confined to wallet and transaction
+modules.
+
+## Configuration
+
+Public browser configuration:
+
+```dotenv
+NEXT_PUBLIC_BRACE_CLUSTER=devnet
+NEXT_PUBLIC_BRACE_RPC_URL=https://your-devnet-rpc.example
+```
+
+Server-only optional chat configuration is documented in [`.env.example`](.env.example).
+Real keys must never be committed or prefixed with `NEXT_PUBLIC_`.
+
+## Error and degradation states
+
+The UI has explicit outcomes for:
+
+- wallet unavailable, rejected, or disconnected;
+- invalid policy or duplicate guard;
+- insufficient reserve or wallet funds;
+- unsupported cluster;
+- unavailable or rate-limited RPC;
+- stale obligation or oracle data;
+- expired, paused, or revoked authorization;
+- cooldown and action-window limits;
+- congested or expired transaction;
+- unknown program error;
+- missing watcher heartbeat;
+- failed automated action.
+
+Unknown errors keep their original detail for debugging but are never presented as a
+successful or safe state.
+
+## Acceptance criteria
+
+- The simulator works without a wallet.
+- Adverse scenarios are available beside the successful scenario, not hidden in a
+  footnote.
+- A real wallet reads only real chain positions.
+- Demo state is unmistakably labeled and never produces explorer links.
+- Every signing flow explains the proposed operation before opening the wallet.
+- The authorization screen derives current capabilities from program constants.
+- A policy rejected by the program is rejected before signing.
+- Reserve withdrawal remains available after pause, expiry, and revocation.
+- Stale account values are labeled before LTV is shown.
+- The panel fits a 375 px viewport without horizontal page scrolling.
+- Unknown chat input does not produce a guessed transaction.
+- Shared vectors keep Rust and TypeScript LTV behavior aligned.
+- Watcher status is reported as unknown when no liveness source exists.
+
+The human acceptance test is simple: after one minute, a first-time user should be
+able to explain what the agent can do with reserve funds and what it cannot do. If
+they cannot, the interface has failed its primary trust requirement.
+
+## Planned work
+
+- hosted watcher and heartbeat endpoint;
+- indexed chain receipts and explorer-linked history;
+- immediate notification when an automated action fails;
+- production-ready independent exit instructions;
+- Telegram or another external notification interface;
+- audited mainnet deployment;
+- v2 collateral top-up with an owner-authorized position model.

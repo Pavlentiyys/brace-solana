@@ -1,12 +1,6 @@
+![Brace — policy-constrained liquidation defense for Kamino](./.github/brace-banner.png)
+
 <div align="center">
-
-<img
-  src=".github/brace-banner.png"
-  alt="Brace — policy-constrained liquidation defense for Kamino"
-  width="1200"
->
-
-<br>
 
 [![Solana](https://img.shields.io/badge/Solana-devnet-9945FF?logo=solana&logoColor=white)](https://solana.com)
 [![Anchor](https://img.shields.io/badge/Anchor-0.31.1-2E3440?logo=rust&logoColor=white)](https://www.anchor-lang.com)

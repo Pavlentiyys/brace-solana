@@ -1,79 +1,83 @@
-> Часть 4. Реализационное дополнение к «ТЗ: ончейн-программа» (архитектура и модель угроз — там).
-> Здесь — структуры, сигнатуры, инварианты и скелет кода. Anchor 0.31.
-> Название не закреплено, в коде используется `guard`.
+# Brace Guard Program
 
-# ТЗ: Rust-программа, уровень реализации
+Brace is a policy-constrained Solana program that repays debt on an existing Kamino
+KLend position from a reserve funded by the borrower.
 
----
+The delegated agent is intentionally less powerful than the owner. It can request a
+repay through `execute_action`, but it cannot change the policy, withdraw the reserve,
+choose a transfer destination, or act after the authorization expires or is revoked.
 
-## 1. Ключевое изменение против первой редакции
+## Deployment status
 
-На Kamino ликвидации разрешительные: любой участник может погасить долг чужой позиции и получить залог со скидкой. Это сильный признак того, что **погашение долга за третье лицо не требует подписи владельца обязательства**.
+| Item | Status |
+|---|---|
+| Network | Solana devnet |
+| Program ID | [`CCSVvtVuDpH1wCCQWExCpdmZ1sqUBabJA1QQGai7aVaY`](https://solscan.io/account/CCSVvtVuDpH1wCCQWExCpdmZ1sqUBabJA1QQGai7aVaY?cluster=devnet) |
+| Mainnet | Not deployed |
+| Audit | Not audited |
+| Current action | `REPAY` only |
 
-Если так, v1 строится вокруг единственного действия `REPAY`, и **миграция позиции пользователю не нужна** — позиция остаётся там, где есть. Барьер входа падает почти до нуля.
+An independent security audit is required before the program is used with real
+funds. Tests and implementation notes are not a substitute for an audit.
 
-Действие `TOP_UP` (внести залог) почти наверняка требует подписи владельца, поэтому переносится в v2 вместе с моделью обёрнутого обязательства.
+## Design goals
 
-**Это допущение проверяется первым, до написания кода.** Способ проверки — в разделе 9. Если оно неверно, v1 меняет форму целиком.
+The program is built around five properties:
 
----
+1. **Narrow delegation.** The agent can execute one policy-constrained action.
+2. **No arbitrary recipient.** Repay funds can only reach the supply vault recorded
+   by the configured Kamino debt reserve.
+3. **Live validation.** Every execution rechecks the position, reserve, oracle status,
+   policy limits, and trigger using current on-chain accounts.
+4. **Atomic failure.** A failed validation or CPI rolls back the entire transaction.
+5. **Unconditional owner exit.** The owner can withdraw the reserve while the guard
+   is paused, expired, or revoked.
 
-## 2. Раскладка модулей
+## Why repayment does not require position migration
 
+Kamino repayment is permissive: the authority of the source token account does not
+have to be the owner of the obligation. The Brace vault PDA can therefore repay an
+existing obligation without moving the position into a wrapper account.
+
+This behavior is verified in two ways:
+
+- against the upstream KLend repayment account and handler definitions;
+- with a LiteSVM test that loads the real KLend binary and repays an obligation whose
+  owner does not sign the transaction.
+
+Collateral top-up is different because depositing collateral requires the obligation
+owner. It remains a v2 design and is rejected by the current policy validator.
+
+## Instructions
+
+| Instruction | Signer | Purpose |
+|---|---|---|
+| `init_guard` | Owner | Creates the guard and vault PDAs and stores the initial policy and delegated agent |
+| `deposit_reserve` | Owner | Transfers debt-mint tokens from an owner-controlled account into the guard vault |
+| `withdraw_reserve` | Owner | Returns some or all reserve funds to an owner-controlled token account |
+| `update_policy` | Owner | Replaces policy limits, changes the agent, and pauses or resumes execution |
+| `revoke` | Owner | Pauses the guard, expires it immediately, and clears all allowed actions |
+| `execute_action` | Agent | Validates the live position and performs the constrained KLend repayment CPI |
+
+There is no generic transfer instruction and no destination argument on
+`execute_action`.
+
+## Accounts and PDAs
+
+Each authorization creates two program-derived addresses:
+
+```text
+guard PDA = ["guard", owner, obligation]
+vault PDA = ["vault", guard PDA]
 ```
-programs/guard/src/
-  lib.rs              точка входа, объявление инструкций
-  state.rs            GuardConfig, битовые маски, константы
-  errors.rs           GuardError
-  events.rs           события
-  math.rs             расчёт LTV и требуемой суммы, только чистые функции
-  adapter/
-    mod.rs            трейт MarketAdapter, PositionState
-    kamino.rs         реализация под Kamino
-  instructions/
-    init_guard.rs
-    deposit_reserve.rs
-    withdraw_reserve.rs
-    update_policy.rs
-    revoke.rs
-    execute_action.rs
-```
 
-`math.rs` не имеет зависимостей от Anchor — это позволяет тестировать его обычными юнит-тестами и прогонять общий с офчейн-частью набор векторов.
+The guard PDA makes one authorization canonical for an owner and obligation pair.
+The vault is both the token account and its own token authority; it signs repayments
+through program-derived seeds.
 
-`adapter/` изолирует всё специфичное для кредитного протокола. Смена или добавление протокола не трогает логику ограничений.
-
----
-
-## 3. Константы и маски
+### `GuardConfig`
 
 ```rust
-pub const BPS: u64 = 10_000;
-
-pub const MIN_COOLDOWN_SECONDS: u32 = 30;
-pub const MAX_DELEGATION_SECONDS: i64 = 90 * 24 * 60 * 60;
-pub const MAX_OBLIGATION_STALENESS_SLOTS: u64 = 2;
-
-pub const ACTION_REPAY: u8 = 1 << 0;
-pub const ACTION_TOP_UP: u8 = 1 << 1;
-
-pub const SEED_GUARD: &[u8] = b"guard";
-pub const SEED_VAULT: &[u8] = b"vault";
-
-pub const KLEND_PROGRAM_ID: Pubkey = pubkey!("TODO");
-```
-
-`KLEND_PROGRAM_ID` — константа, а не аккаунт из входа. Принимать адрес целевой программы параметром означает позволить агенту подсунуть свою.
-
-`MAX_DELEGATION_SECONDS` в 90 дней заставляет пользователя периодически подтверждать делегирование осознанно.
-
----
-
-## 4. Состояние
-
-```rust
-#[account]
-#[derive(InitSpace)]
 pub struct GuardConfig {
     pub owner: Pubkey,
     pub agent: Pubkey,
@@ -105,259 +109,192 @@ pub struct GuardConfig {
 }
 ```
 
-PDA: `[SEED_GUARD, owner, obligation]` и `[SEED_VAULT, guard_config]`.
+## Policy constraints
 
-Порог задан через LTV в базисных пунктах, а не через health factor: LTV растёт при ухудшении позиции, поэтому все сравнения однонаправленные, а граничные тесты однозначны.
+The current validator requires:
 
----
+- `target_ltv_bps < trigger_ltv_bps <= 10_000`;
+- a positive per-action amount cap;
+- at least one permitted action per window;
+- a positive window duration;
+- a cooldown of at least 30 seconds;
+- `allowed_actions == ACTION_REPAY`;
+- an expiry in the future and no more than 90 days away;
+- a trigger below the obligation's checked liquidation threshold.
 
-## 5. Ошибки
+LTV is represented in basis points because risk increases in one direction: a higher
+LTV is worse. This keeps threshold comparisons and boundary tests explicit.
 
-```rust
-#[error_code]
-pub enum GuardError {
-    #[msg("Agent key does not match guard config")]
-    UnauthorizedAgent,
-    #[msg("Guard is paused")]
-    GuardPaused,
-    #[msg("Delegation expired")]
-    GuardExpired,
-    #[msg("Cooldown has not elapsed")]
-    CooldownActive,
-    #[msg("Action limit for the current window is exhausted")]
-    RateLimitExceeded,
-    #[msg("Action kind is not permitted by policy")]
-    ActionNotAllowed,
-    #[msg("Amount exceeds per-action limit or vault balance")]
-    AmountExceedsLimit,
-    #[msg("Obligation state was not refreshed in the current slot")]
-    StaleObligation,
-    #[msg("Oracle price is stale or confidence is too wide")]
-    StaleOracle,
-    #[msg("Current LTV is below the configured trigger")]
-    TriggerNotMet,
-    #[msg("Action would not improve position health")]
-    ActionWouldNotImprove,
-    #[msg("Amount overshoots the configured target LTV")]
-    Overcorrection,
-    #[msg("Policy parameters are inconsistent")]
-    InvalidPolicy,
-    #[msg("Arithmetic overflow")]
-    MathOverflow,
-    #[msg("Unexpected lending program")]
-    UnexpectedProgram,
-}
-```
+## `execute_action` validation flow
 
----
+The watcher normally prepends Kamino reserve and obligation refresh instructions.
+The guard then validates all conditions again before invoking KLend:
 
-## 6. Адаптер рынка
+1. The signer matches the delegated agent.
+2. The guard is active and has not expired.
+3. The cooldown and action-window limits permit another action.
+4. The requested action is exactly `ACTION_REPAY`.
+5. The amount is positive and does not exceed the policy cap or vault balance.
+6. The obligation and debt reserve are owned by the canonical KLend program.
+7. The obligation owner, lending market, debt reserve, mint, supply vault, and token
+   program match the values pinned by the guard.
+8. The obligation and reserve are not stale, their refresh slots are no more than two
+   slots behind, and Kamino's oracle checks pass.
+9. Every deposit reserve referenced by the obligation is supplied in the correct
+   order.
+10. Current LTV is at or above the configured trigger.
+11. The requested repay value cannot overshoot the configured target.
+12. The program invokes KLend's `repay_obligation_liquidity_v2` instruction.
+13. After the CPI, the vault balance must decrease, collateral value must remain
+    unchanged, and risk-adjusted debt must decrease.
+14. Only after every postcondition passes are counters and totals updated.
 
-```rust
-pub struct PositionState {
-    pub collateral_value: u128,
-    pub debt_value: u128,
-    pub last_update_slot: u64,
-}
+Because the trigger is evaluated at execution time, a delayed or durable-nonce
+transaction cannot rely on the market state that existed when it was prepared.
 
-pub trait MarketAdapter {
-    fn read_position(obligation: &AccountInfo) -> Result<PositionState>;
-    fn liquidation_ltv_bps(reserve: &AccountInfo) -> Result<u16>;
-    fn repay_cpi<'info>(ctx: RepayCtx<'info>, amount: u64, signer: &[&[&[u8]]]) -> Result<()>;
-}
-```
+## Fixed external programs
 
-`collateral_value` и `debt_value` берутся из уже обновлённого состояния обязательства в том же представлении, что использует сам протокол. **Собственный расчёт по спотовым ценам недопустим:** расхождение с протоколом означает срабатывание не в тот момент.
-
-`read_position` обязана проверить владельца аккаунта и дискриминатор, а не доверять типу.
-
----
-
-## 7. Математика
+The program does not accept lending program IDs from the caller:
 
 ```rust
-pub fn ltv_bps(collateral: u128, debt: u128) -> Result<u16> {
-    if collateral == 0 {
-        return Ok(u16::MAX.min(BPS as u16));
-    }
-    let v = debt
-        .checked_mul(BPS as u128).ok_or(GuardError::MathOverflow)?
-        .checked_div(collateral).ok_or(GuardError::MathOverflow)?;
-    Ok(v.min(BPS as u128) as u16)
-}
-
-/// Сколько долга погасить, чтобы LTV стал равен target.
-/// debt' = debt - x, collateral не меняется при погашении из резерва.
-/// (debt - x) / collateral = target  =>  x = debt - target * collateral
-pub fn repay_amount_for_target(
-    collateral: u128,
-    debt: u128,
-    target_bps: u16,
-) -> Result<u128> {
-    let want_debt = collateral
-        .checked_mul(target_bps as u128).ok_or(GuardError::MathOverflow)?
-        .checked_div(BPS as u128).ok_or(GuardError::MathOverflow)?;
-    Ok(debt.saturating_sub(want_debt))
-}
+pub const KLEND_PROGRAM_ID: Pubkey =
+    pubkey!("KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD");
+pub const FARMS_PROGRAM_ID: Pubkey =
+    pubkey!("FarmsPZpWu9i7Kky8tPN37rs2TpmMrAZrC7S7vJa91Hr");
 ```
 
-Погашение из резерва не трогает залог, поэтому формула простая. При `TOP_UP` в v2 меняется знаменатель, и функция будет другой.
+Both accounts must also be executable. The lending market authority is checked as
+the canonical KLend PDA derived from `['lma', lending_market]`.
 
-Весь модуль — чистые функции без Anchor. Набор тестовых векторов из этого модуля обязателен к прохождению офчейн-наблюдателем, вебом и ботом: формула живёт в четырёх реализациях, расхождение в третьем знаке даёт ложные тревоги у пользователя.
+## Kamino adapter
 
----
+`adapter/kamino.rs` isolates every KLend-specific detail:
 
-## 8. `execute_action`
+- account owners and Anchor discriminators;
+- pinned obligation and reserve layout versions;
+- `U68F60` fixed-point fields;
+- risk-adjusted debt values, including borrow factors;
+- reserve relationships and token program selection;
+- oracle and freshness status;
+- account order for `repay_obligation_liquidity_v2`.
 
-```rust
-#[derive(Accounts)]
-pub struct ExecuteAction<'info> {
-    #[account(
-        mut,
-        seeds = [SEED_GUARD, guard.owner.as_ref(), guard.obligation.as_ref()],
-        bump = guard.bump,
-        has_one = obligation,
-        has_one = vault,
-    )]
-    pub guard: Account<'info, GuardConfig>,
+The on-chain program deliberately does not depend on the Kamino SDK. SDK updates
+therefore cannot change the build transitively, while layout regressions are detected
+by tests against committed mainnet account bytes.
 
-    #[account(
-        mut,
-        seeds = [SEED_VAULT, guard.key().as_ref()],
-        bump = guard.vault_bump,
-        constraint = vault.mint == guard.vault_mint @ GuardError::InvalidPolicy,
-    )]
-    pub vault: Account<'info, TokenAccount>,
+Layout offsets and the verification history are documented in
+[`IMPLEMENTATION.md`](IMPLEMENTATION.md).
 
-    pub agent: Signer<'info>,
+## Math
 
-    /// CHECK: валидируется адаптером
-    #[account(mut)]
-    pub obligation: UncheckedAccount<'info>,
+The pure math module is independent of Anchor. It calculates LTV and the repay value
+required to approach a target using integer arithmetic and wider intermediates.
 
-    /// CHECK: валидируется адаптером
-    #[account(mut)]
-    pub debt_reserve: UncheckedAccount<'info>,
+Kamino values are fixed-point `U68F60` integers. The program reads the aggregate,
+borrow-factor-adjusted values already maintained by KLend instead of recomputing the
+position from independent spot prices.
 
-    /// CHECK: валидируется адаптером
-    pub lending_market: UncheckedAccount<'info>,
+The shared contract is:
 
-    #[account(mut)]
-    pub reserve_liquidity_supply: Account<'info, TokenAccount>,
-
-    #[account(address = KLEND_PROGRAM_ID @ GuardError::UnexpectedProgram)]
-    /// CHECK: адрес зафиксирован константой
-    pub lending_program: UncheckedAccount<'info>,
-
-    pub token_program: Program<'info, Token>,
-}
+```text
+LTV basis points = floor(debt_value * 10,000 / collateral_value)
 ```
 
-Порядок проверок в теле — строго до любого изменения состояния:
+The on-chain representation clamps reported LTV to 10,000 basis points, but health
+improvement after repayment is checked against exact risk-adjusted debt. This allows
+an underwater position to improve even when both displayed LTV values remain clamped
+at 100%.
 
-```rust
-pub fn handler(ctx: Context<ExecuteAction>, action_kind: u8, amount: u64) -> Result<()> {
-    let clock = Clock::get()?;
-    let guard = &mut ctx.accounts.guard;
+[`vectors/ltv-bps.json`](vectors/ltv-bps.json) is consumed by both Rust and TypeScript
+tests so rounding changes cannot silently diverge between the program and frontend.
 
-    require_keys_eq!(ctx.accounts.agent.key(), guard.agent, GuardError::UnauthorizedAgent);
-    require!(!guard.paused, GuardError::GuardPaused);
-    require!(clock.unix_timestamp < guard.expires_at, GuardError::GuardExpired);
-    require!(
-        clock.unix_timestamp - guard.last_action_at >= guard.cooldown_seconds as i64,
-        GuardError::CooldownActive
-    );
+## Owner exit guarantee
 
-    roll_window(guard, clock.unix_timestamp);
-    require!(
-        guard.actions_in_window < guard.max_actions_per_window,
-        GuardError::RateLimitExceeded
-    );
+`withdraw_reserve` depends only on:
 
-    require!(action_kind & guard.allowed_actions != 0, GuardError::ActionNotAllowed);
-    require!(action_kind == ACTION_REPAY, GuardError::ActionNotAllowed); // v1
+- the owner signature;
+- the guard, vault, mint, and owner destination relationships;
+- a positive amount not exceeding the current vault balance.
 
-    require!(
-        amount > 0 && amount <= guard.max_action_amount && amount <= ctx.accounts.vault.amount,
-        GuardError::AmountExceedsLimit
-    );
+It does not check pause state, expiry, or allowed actions. Passing `u64::MAX` requests
+the entire current vault balance, avoiding a stale off-chain balance read.
 
-    let pos = Kamino::read_position(&ctx.accounts.obligation)?;
-    require!(
-        clock.slot.saturating_sub(pos.last_update_slot) <= MAX_OBLIGATION_STALENESS_SLOTS,
-        GuardError::StaleObligation
-    );
+Dedicated LiteSVM tests cover withdrawal after pause, expiry, and revocation.
 
-    let ltv_before = ltv_bps(pos.collateral_value, pos.debt_value)?;
-    require!(ltv_before >= guard.trigger_ltv_bps, GuardError::TriggerNotMet);
+## Repository layout
 
-    let needed = repay_amount_for_target(pos.collateral_value, pos.debt_value, guard.target_ltv_bps)?;
-    require!((amount as u128) <= needed, GuardError::Overcorrection);
-
-    let debt_after = pos.debt_value.saturating_sub(amount as u128);
-    let ltv_after = ltv_bps(pos.collateral_value, debt_after)?;
-    require!(ltv_after < ltv_before, GuardError::ActionWouldNotImprove);
-
-    let guard_key = guard.key();
-    let seeds: &[&[u8]] = &[SEED_VAULT, guard_key.as_ref(), &[guard.vault_bump]];
-    Kamino::repay_cpi(RepayCtx::from(&ctx), amount, &[seeds])?;
-
-    guard.last_action_at = clock.unix_timestamp;
-    guard.actions_in_window += 1;
-    guard.total_actions += 1;
-    guard.total_repaid = guard.total_repaid.saturating_add(amount);
-
-    emit!(ActionExecuted { /* … */ });
-    Ok(())
-}
+```text
+program/
+  programs/guard/              on-chain Anchor workspace
+    src/adapter/kamino.rs      KLend layout and CPI boundary
+    src/instructions/          six instruction handlers
+    src/math.rs                pure fixed-point calculations
+    src/state.rs               guard account and policy constants
+  tests/litesvm-harness/       external transaction-level test workspace
+  tests/mock-klend/            minimal SBF test double at the KLend program ID
+  vectors/                     cross-language math vectors
+  idl/guard.json               committed Anchor IDL
 ```
 
-Три проверки несут основную нагрузку. **Свежесть состояния** закрывает работу по устаревшим данным. **Порог** делает бессмысленным произвольный вызов и, как следствие, закрывает атаку через отложенное исполнение: заранее подписанная транзакция с durable nonce не пройдёт, если в момент реального исполнения условие не выполняется — именно этот вектор дал захват полномочий в инциденте Drift на $285 млн в апреле 2026. **Постусловие** не даёт сделать хуже.
+The program, LiteSVM harness, and mock KLend program are separate Cargo workspaces.
+The on-chain program pins Solana 2.1.7, while the host-side LiteSVM runtime requires a
+newer Solana crate graph.
 
-Единственный `Signer` здесь — агент, и он не является получателем средств ни в одном пути исполнения.
+## Build and test
 
----
+Requirements:
 
-## 9. Что проверить до кода
+- Rust and Cargo;
+- Solana CLI 2.1.7 with the SBF toolchain;
+- the dependency versions pinned in the committed lockfiles.
 
-**Разрешительное ли погашение.** Способ: взять на devnet чужое обязательство и попытаться погасить часть долга подписью, не являющейся владельцем. Если проходит — v1 в текущем виде. Если нет — нужна модель обёрнутого обязательства и две дополнительные инструкции.
+```bash
+cd program
 
-**Бюджет вычислений.** Цикл включает обновление резервов, обновление обязательства, нашу валидацию и CPI. Измерить на форке mainnet. При нехватке: запрос увеличенного лимита, затем разбивка на две транзакции внутри одного Jito-бандла.
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
 
-**Формат состояния обязательства.** Определяет `adapter/kamino.rs`: где лежат стоимости, в каком масштабе, где номер слота обновления.
-
-**Учитывает ли протокол borrow factor** при расчёте LTV. Если да, наша формула обязана его повторять, иначе пороги разъедутся.
-
----
-
-## 10. Тесты
-
-**Юнит (`math.rs`):** нулевой залог, нулевой долг, максимальные значения, точность на границе, совпадение с эталонными векторами.
-
-**LiteSVM, негативные — по одному на каждую ошибку:**
-
-`agent_mismatch_rejected`, `paused_rejected`, `expired_rejected`, `cooldown_rejected`, `window_limit_rejected`, `disallowed_action_rejected`, `amount_over_limit_rejected`, `amount_over_vault_rejected`, `stale_obligation_rejected`, `ltv_below_trigger_rejected`, `overcorrection_rejected`, `no_improvement_rejected`, `foreign_lending_program_rejected`, `durable_nonce_replay_rejected`, `withdraw_works_when_revoked`, `withdraw_works_when_expired`, `withdraw_works_when_paused`.
-
-Последние три доказывают, что выход пользователя не блокируется ничем, — это ключевая гарантия продукта, и она должна быть покрыта тестом явно.
-
-**Фаззинг:** случайные пары `(collateral, debt)` — проверка, что `execute_action` никогда не увеличивает LTV и никогда не переводит средства мимо `reserve_liquidity_supply`.
-
-**Интеграция:** локальный валидатор с клонированными аккаунтами mainnet, воспроизведение исторического падения цены, полный цикл.
-
----
-
-## 11. Зависимости
-
-```toml
-[dependencies]
-anchor-lang = { version = "0.31", features = ["init-if-needed"] }
-anchor-spl = "0.31"
-
-[dev-dependencies]
-litesvm = "0.6"
-proptest = "1"
+cargo build-sbf --manifest-path programs/guard/Cargo.toml
+cargo build-sbf --manifest-path tests/mock-klend/Cargo.toml
+cargo test --manifest-path tests/litesvm-harness/Cargo.toml
 ```
 
-Внешние SDK кредитного протокола в зависимости программы не тянуть — только необходимые константы и разбор структур в `adapter/kamino.rs`. Иначе обновление их SDK ломает сборку программы.
+`anchor build` is not the supported build path for this repository. Use
+`cargo build-sbf` so the build follows the pinned Solana SBF toolchain.
 
-**Аудит обязателен до приёма реальных средств.** Закладывать в бюджет и сроки сразу.
+The optional real-KLend CPI test requires the uncommitted 10 MB program binary:
+
+```bash
+solana program dump -u m KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD \
+  tests/litesvm-harness/fixtures/klend.so
+```
+
+Without the ELF, that case exits early and the remaining suite stays offline-capable.
+
+## Test coverage
+
+| Suite | Count | Coverage |
+|---|---:|---|
+| Guard unit and property tests | 42 | Policy validation, fixed-point math, shared vectors, replay behavior, and safety properties |
+| LiteSVM harness | 45 | Negative cases, withdrawal invariants, layouts, compute measurement, mock CPI, and optional real KLend CPI |
+
+The property tests establish that repayment never increases position risk and that
+the repayment path only debits the guard vault and credits the configured reserve
+supply vault.
+
+## Known limitations
+
+- v1 supports debt repayment only. `TOP_UP` is rejected.
+- One guard is tied to one owner, one obligation, and one debt reserve.
+- `init_guard` requires an existing borrow and a usable refreshed liquidation
+  threshold.
+- The deployed program is on devnet only and has not been audited.
+- Committed KLend fixtures are snapshots and must be refreshed when the pinned layout
+  changes.
+- The real-KLend test proves the CPI account shape and repayment path, not a complete
+  live-oracle refresh cycle.
+- The repository includes a reference watcher but does not provide a hosted keeper or
+  public liveness service.
+
+For measured compute usage, dependency pins, external account offsets, and previously
+resolved implementation failures, see [`IMPLEMENTATION.md`](IMPLEMENTATION.md).
