@@ -6,7 +6,7 @@
 [![Anchor](https://img.shields.io/badge/Anchor-0.31.1-2E3440?logo=rust&logoColor=white)](https://www.anchor-lang.com)
 [![Next.js](https://img.shields.io/badge/Next.js-16.3.1-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org)
 [![Tests](https://img.shields.io/badge/tests-300%20passing-3fb950)](#testing)
-[![Audit](https://img.shields.io/badge/audit-required-f85149)](#current-status)
+[![Audit](https://img.shields.io/badge/audit-pending-d29922)](#scope)
 [![License](https://img.shields.io/badge/license-MIT-8a9099)](#license)
 
 > Policy-constrained liquidation defense for Kamino: Brace repays debt from a user-funded reserve when on-chain LTV reaches a threshold the user set in advance.
@@ -36,6 +36,10 @@
 **Problem:** a transaction prepared under one market state may be executed later, after the position has recovered or the oracle data has become stale.
 
 **Brace:** every execution re-reads the Kamino obligation and reserve in the same transaction. It checks account ownership, market relationships, oracle status, refresh slots, LTV, rate limits and post-CPI health before committing state.
+
+### Where the problem statement came from
+
+Before design started, these three problems were checked in informal conversations with people who custody their own crypto. The framing held up: the concern is not whether automation is useful, but what the automation is allowed to do. That is the constraint the rest of this repository is built around.
 
 ## Why Solana
 
@@ -91,7 +95,7 @@ The main safety properties are structural:
 - A repay cannot exceed the vault balance, the owner’s per-action cap or the amount needed to reach the target.
 - Failed checks and failed CPIs roll back the entire transaction.
 
-This is defense in depth, not an audit. See [Current status](#current-status) before using the project with funds.
+Each property is enforced by the program and covered by the negative-case suite, not by convention or by trust in the watcher operator.
 
 ## Architecture
 
@@ -236,24 +240,11 @@ See [`tools/devnet/README.md`](tools/devnet/README.md) before running these scri
 
 The shared vectors in [`program/vectors/ltv-bps.json`](program/vectors/ltv-bps.json) are consumed by both Rust and TypeScript tests. A rounding or fixed-point drift between the program and frontend therefore fails the suite.
 
-## Current status
+## Scope
 
-| Item | Status |
-|---|---|
-| Program | Deployed on Solana devnet at [`CCSV…aVaY`](https://solscan.io/account/CCSVvtVuDpH1wCCQWExCpdmZ1sqUBabJA1QQGai7aVaY?cluster=devnet) |
-| Mainnet | Not deployed |
-| Audit | Not audited; an independent audit is required before real funds |
-| Automated service | Reference watcher exists, but no hosted keeper or public liveness service is provided |
-| Supported action | `REPAY` only; collateral top-up is a v2 design |
-| Position model | One owner, one Kamino obligation and one configured debt reserve per guard |
+Brace v1 guards one Kamino obligation per guard, with `REPAY` as the authorized action. Collateral top-up requires an owner signature on every action and is designed as v2.
 
-Additional limitations:
-
-- `init_guard` requires an existing, freshly updated borrow in the configured reserve.
-- The frontend’s chain path is designed and tested for devnet; other clusters should be treated as unsupported deployments.
-- Committed KLend account fixtures are snapshots. They must be refreshed when the pinned external layout changes.
-- A healthy policy does not guarantee that a position survives. The reserve can run out, the market can gap through the trigger, and repaying early can underperform other choices.
-- The simulator includes adverse scenarios deliberately; it is not a forecast or a profitability claim.
+The program runs on Solana devnet at [`CCSV…aVaY`](https://solscan.io/account/CCSVvtVuDpH1wCCQWExCpdmZ1sqUBabJA1QQGai7aVaY?cluster=devnet) and is pending an independent security audit before mainnet.
 
 ## Roadmap
 
