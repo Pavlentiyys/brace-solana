@@ -415,6 +415,16 @@ export const en = {
     },
     authorize: {
       title: "Authorization",
+      // Shown when the position already has a guard. Granting a second one cannot
+      // work — the program creates the account at a fixed address — and the
+      // failure surfaces as an alarming wallet prompt, so the screen has to say
+      // this before offering the button rather than after.
+      existingHeading: "This position is already authorized",
+      existingBody:
+        "Granting again would try to create an authorization that exists, which your wallet will flag and refuse. Change the rule instead, or revoke this one and start over.",
+      existingStatus: "Status",
+      existingExpiry: "Ends on",
+      existingCta: "Open the position panel",
       heading: "What you are about to allow",
       lead: "This is the only thing the chat cannot do for you. Read the two lists before you sign; they are generated from the program, not written by hand.",
       canHeading: "The agent will be able to",
@@ -532,6 +542,10 @@ export const en = {
       program_not_deployed: {
         title: "The program is not deployed",
         body: "There is nothing to sign against yet. This screen shows what the operation will ask for.",
+      },
+      guard_exists: {
+        title: "This position is already authorized",
+        body: "Nothing was sent and nothing changed. Your existing authorization is still in force, and you can see its limits, pause it or revoke it from the position panel. To change the rule, change it rather than granting a second one.",
       },
       invalid_policy: {
         title: "The program would reject this rule",

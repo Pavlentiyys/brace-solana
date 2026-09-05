@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo } from "react";
 
@@ -7,6 +8,7 @@ import { FailureNotice } from "@/components/app/failure-notice";
 import { ActionButton, Card, CardTitle, Note, PageHeading, Row, Rows, StatusDot } from "@/components/app/ui";
 import { en } from "@/content/en";
 import { calendarDate, percentFromBps } from "@/lib/core/format";
+import { authorityIsLive, authorityStatus } from "@/lib/core/guard";
 import { durationLabel } from "@/lib/core/liveness";
 import { defaultPolicy, policyActions, validatePolicy } from "@/lib/core/policy";
 import { DISCRIMINATORS, MAX_DELEGATION_SECONDS } from "@/lib/core/program";
@@ -62,9 +64,43 @@ export function AuthorizeScreen() {
   if (failure && !snapshot) return <FailureNotice failure={failure} />;
   if (!snapshot) return <Note>Reading your position</Note>;
 
+  // The guard is already in the snapshot; this screen simply never looked at it
+  // and offered to create a second one, which fails inside the wallet's
+  // simulation and reaches the user as "unsafe transaction" then "unexpected
+  // error". The lists below still explain what was granted, so they stay.
+  const existing = entry?.guard ?? null;
+
   return (
     <div className="flex max-w-[860px] flex-col gap-8">
       <PageHeading title={copy.heading} lead={copy.lead} />
+
+      {existing ? (
+        <Card>
+          <CardTitle>
+            <StatusDot tone={authorityIsLive(existing, now) ? "ok" : "warn"} />{" "}
+            {copy.existingHeading}
+          </CardTitle>
+          <Note className="mt-2 max-w-[70ch]">{copy.existingBody}</Note>
+          <Rows>
+            <Row label={copy.existingStatus} value={authorityStatus(existing, now)} />
+            <Row
+              label={copy.trigger}
+              value={`${percentFromBps(existing.policy.triggerLtvBps)} LTV`}
+            />
+            <Row
+              label={copy.target}
+              value={`${percentFromBps(existing.policy.targetLtvBps)} LTV`}
+            />
+            <Row label={copy.existingExpiry} value={calendarDate(existing.policy.expiresAt)} />
+          </Rows>
+          <Link
+            href="/app"
+            className="mt-4 inline-block text-[13px] text-accent underline-offset-4 hover:underline"
+          >
+            {copy.existingCta}
+          </Link>
+        </Card>
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
@@ -157,7 +193,7 @@ export function AuthorizeScreen() {
         <ActionButton
           variant="primary"
           busy={authorize.isPending}
-          disabled={!entry || problems.length > 0}
+          disabled={!entry || problems.length > 0 || existing !== null}
           onClick={() =>
             authorize.mutate(undefined, {
               onSuccess: (outcome) => {

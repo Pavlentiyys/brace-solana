@@ -1,286 +1,291 @@
 <div align="center">
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset=".github/logo-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset=".github/logo-light.svg">
-  <img alt="Brace" src=".github/logo-light.svg" width="470">
-</picture>
+<img
+  src=".github/brace-banner.png"
+  alt="Brace — policy-constrained liquidation defense for Kamino"
+  width="1200"
+>
 
 <br>
 
-[![Solana](https://img.shields.io/badge/Solana-2.1.7-14F195?logo=solana&logoColor=white)](https://solana.com)
+[![Solana](https://img.shields.io/badge/Solana-devnet-9945FF?logo=solana&logoColor=white)](https://solana.com)
 [![Anchor](https://img.shields.io/badge/Anchor-0.31.1-2E3440?logo=rust&logoColor=white)](https://www.anchor-lang.com)
-[![Rust](https://img.shields.io/badge/Rust-1.79%20SBF-CE422B?logo=rust&logoColor=white)](https://www.rust-lang.org)
-[![Next.js](https://img.shields.io/badge/Next.js-16.3-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
-[![Kamino](https://img.shields.io/badge/Kamino-devnet%20live-4b8fff)](https://kamino.finance)
-
+[![Next.js](https://img.shields.io/badge/Next.js-16.3.1-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org)
 [![Tests](https://img.shields.io/badge/tests-300%20passing-3fb950)](#testing)
-[![Program](https://img.shields.io/badge/program-devnet-4b8fff)](#status)
-[![Audit](https://img.shields.io/badge/audit-required-f85149)](#status)
+[![Audit](https://img.shields.io/badge/audit-required-f85149)](#current-status)
 [![License](https://img.shields.io/badge/license-MIT-8a9099)](#license)
+
+> Policy-constrained liquidation defense for Kamino: Brace repays debt from a user-funded reserve when on-chain LTV reaches a threshold the user set in advance.
+
+[Devnet program](https://solscan.io/account/CCSVvtVuDpH1wCCQWExCpdmZ1sqUBabJA1QQGai7aVaY?cluster=devnet) · [On-chain design](program/README.md) · [Implementation notes](program/IMPLEMENTATION.md) · [Frontend specification](frontend/PLATFORM.md)
 
 </div>
 
 ---
 
-## What this is
+## Problem and solution
 
-A Solana program and a web app for one job: **repay part of a Kamino loan
-automatically, when the position gets close to liquidation, under limits the borrower
-sets in advance.**
+### 1. Liquidation risk does not wait for the borrower
 
-You deposit a reserve of USDC, write a rule ("when my LTV reaches 80%, repay down to
-70%, at most 200 USDC per action, at most twice an hour"), and authorize an agent key.
-The agent can then do exactly one thing: call `execute_action`, which repays debt from
-your vault into Kamino's reserve. That is the only instruction that moves your money,
-and it has no parameter for a destination.
+**Problem:** a Kamino position can cross its liquidation threshold while its owner is offline. An alert still leaves the owner responsible for noticing it, opening a wallet and submitting a repay in time.
 
-The guarantee is structural, not a promise:
+**Brace:** the owner pre-funds a dedicated reserve and defines a policy such as: “at 80% LTV, repay toward 70%; spend no more than 200 USDC per action; act at most twice per hour.” A watcher can submit the action, but the Solana program decides whether it is allowed.
 
-- There is **no instruction that transfers to an arbitrary address.** The agent cannot
-  send funds anywhere, because the program cannot express it.
-- Every action is gated on **live account data read in the same transaction.** A
-  pre-signed transaction held for later fails when the condition no longer holds —
-  the durable-nonce vector the specification was written against, covered by the
-  `durable_nonce_replay_rejected` test.
-- **Withdrawal is never blocked.** Not by a pause, not by expiry, not by revocation.
-  Three tests exist solely to prove the exit stays open.
-- The agent's authority **expires**, at most 90 days out, so delegation has to be
-  renewed deliberately.
+### 2. Automation usually expands trust
 
-### Status
+**Problem:** giving a bot a transferable key or an unrestricted token approval turns an operational shortcut into a custody risk.
 
-The program is **deployed on devnet** at
-[`CCSVvtVuDpH1wCCQWExCpdmZ1sqUBabJA1QQGai7aVaY`](https://solscan.io/account/CCSVvtVuDpH1wCCQWExCpdmZ1sqUBabJA1QQGai7aVaY?cluster=devnet).
-It is **not on mainnet**, and it has **not been audited**.
+**Brace:** the delegated agent can call only `execute_action`. That instruction has no arbitrary recipient: funds move from the guard vault to the liquidity supply vault recorded by the configured Kamino reserve. Policy changes, deposits, withdrawals and revocation still require the owner.
 
-Everything downstream of that address is derived from `lib/core/program.ts` rather
-than restated, because the first deploy left three copies of it behind: the site
-footer, the app, and the LiteSVM harness. Two of them stayed on Anchor's
-placeholder — the harness loudly, with all 22 negative-case tests failing on
-Anchor's 4100, and the footer quietly, publishing an address with nothing on it.
-Tests now assert both against `declare_id!`.
+### 3. A valid decision can become stale before execution
 
-**Reading works without any of it.** Tracking a Kamino position needs nothing of
-ours deployed, because the obligations are Kamino's accounts. Connect Phantom on
-devnet and the app finds every position your address holds.
+**Problem:** a transaction prepared under one market state may be executed later, after the position has recovered or the oracle data has become stale.
 
-**An audit is required before this takes real funds.** Nothing in this repository
-substitutes for one.
+**Brace:** every execution re-reads the Kamino obligation and reserve in the same transaction. It checks account ownership, market relationships, oracle status, refresh slots, LTV, rate limits and post-CPI health before committing state.
 
----
+## Why Solana
 
-## Layout
+- **Atomic composability:** Brace validates the position and invokes Kamino KLend through CPI in one transaction.
+- **Program-enforced permissions:** PDAs, signer constraints and fixed program IDs keep the watcher’s authority narrower than the owner’s authority.
+- **Fast state updates:** reserve and obligation refreshes can be placed immediately before the guarded repay.
+- **Existing DeFi state:** Brace acts on the borrower’s existing Kamino obligation; it does not require migrating the position into a new lending market.
 
+## What is implemented
+
+### On-chain guard
+
+- Six Anchor instructions: `init_guard`, `deposit_reserve`, `withdraw_reserve`, `update_policy`, `revoke` and `execute_action`.
+- Repay-only v1 policy with a trigger LTV, target LTV, per-action cap, cooldown, windowed action limit and expiry.
+- Maximum delegation period of 90 days.
+- Guard and vault PDAs derived from the owner and Kamino obligation.
+- Direct KLend account decoding and `repay_obligation_liquidity_v2` CPI without a Kamino SDK dependency in the program.
+- Validation of account owners, discriminators, layout version, market relationships, oracle checks and state freshness.
+- Post-CPI invariants that require collateral to remain unchanged and risk-adjusted debt to decrease.
+- Owner withdrawals remain available while the guard is paused, expired or revoked.
+
+### Web application
+
+- Public liquidation simulator with recovery, short-wick and no-rebound scenarios.
+- Chat-first interface with deterministic commands for position, reserve, authorization, history, pause and revoke flows.
+- Browser demo world with explicit failure controls and no wallet required.
+- Phantom-based devnet reads and signing, including account-change and reconnect handling.
+- Plain JSON-RPC decoding for Kamino positions; `@solana/web3.js` is isolated to transaction and wallet paths.
+- User-facing decoding of all Anchor guard errors.
+
+### Devnet tooling
+
+- Scripts that create a real KLend devnet market backed by live Pyth feeds.
+- Funding, seed, borrow, refresh and inspection utilities for opening a reproducible test position.
+- A reference watcher that refreshes Kamino accounts and submits `execute_action` with the delegated agent key.
+
+## Security model
+
+| Actor | Allowed operations |
+|---|---|
+| Owner wallet | Create and update a guard, fund or withdraw the reserve, pause and revoke authorization |
+| Delegated agent | Call `execute_action` for the configured guard |
+| Guard program | Enforce the policy and repay the configured Kamino debt reserve |
+| Kamino KLend | Refresh the obligation and process the debt repayment |
+
+The main safety properties are structural:
+
+- The agent cannot select a transfer destination.
+- `execute_action` is pinned to the canonical KLend and Farms program IDs.
+- The obligation owner, lending market, debt reserve, mint, supply vault and token program must agree.
+- The obligation and reserve must be fresh and pass Kamino’s oracle checks.
+- The trigger is evaluated at execution time, including for delayed or durable-nonce transactions.
+- A repay cannot exceed the vault balance, the owner’s per-action cap or the amount needed to reach the target.
+- Failed checks and failed CPIs roll back the entire transaction.
+
+This is defense in depth, not an audit. See [Current status](#current-status) before using the project with funds.
+
+## Architecture
+
+```text
+┌─────────────────────┐
+│ Owner + Phantom     │
+│                     │
+│ init / update       │
+│ deposit / withdraw  │
+│ pause / revoke      │
+└──────────┬──────────┘
+           │ signs owner operations
+           ▼
+┌─────────────────────┐       JSON-RPC reads       ┌─────────────────────┐
+│ Next.js application │◀──────────────────────────▶│ Kamino obligation   │
+│ chat + simulator    │                            │ reserves + markets  │
+└─────────────────────┘                            └──────────▲──────────┘
+                                                             │
+┌─────────────────────┐  refresh + execute_action  ┌─────────┴───────────┐
+│ Watcher / agent key │───────────────────────────▶│ Brace guard program │
+└─────────────────────┘                            │                     │
+                                                   │ policy + live-state │
+                                                   │ checks              │
+                                                   └─────────┬───────────┘
+                                                             │ fixed KLend CPI
+                                                             ▼
+                                                   ┌─────────────────────┐
+                                                   │ Guard vault ───────▶│
+                                                   │ KLend supply vault  │
+                                                   └─────────────────────┘
 ```
-program/     The on-chain guard. Rust, Anchor 0.31.
-  programs/guard/src/
-    lib.rs           six instructions
-    state.rs         GuardConfig, the policy and its limits
-    math.rs          LTV and repay maths, pure, no Anchor
-    adapter/kamino.rs  KLend account layout and the repay CPI
-  tests/
-    litesvm-harness/ the negative-case suite, plus real mainnet bytes
-    mock-klend/      a stand-in KLend, loaded at the real program id
-  vectors/           the cross-implementation LTV contract
 
-frontend/    Next.js. The landing page, the simulator and the agent.
-  lib/core/        framework-free: LTV, policy, guard state, instruction encoding
-  lib/platform/    the seam: Kamino reads, the demo world, the wallet
-  lib/chat/        the bot, as a pure function
-  components/      the screens, which the bot answers with
+The watcher proposes execution; it is not a source of authority. If its calculation is wrong, the on-chain checks reject the transaction.
+
+## Repository layout
+
+```text
+program/
+  programs/guard/          Anchor program and direct Kamino adapter
+  tests/litesvm-harness/   Transaction-level and layout regression tests
+  tests/mock-klend/        Minimal KLend stand-in loaded at the real program ID
+  vectors/                 Shared Rust/TypeScript LTV test vectors
+
+frontend/
+  app/                     Landing page, docs, API route and application routes
+  components/              Chat, simulator and signed-operation screens
+  lib/core/                Framework-free policy, LTV and instruction logic
+  lib/platform/            Demo/chain sources, Kamino decoder and wallet boundary
+
+tools/devnet/              KLend market setup, test-position and watcher scripts
 ```
 
-Two documents are the specification and are worth reading before the code:
-[`program/README.md`](program/README.md) for the on-chain side and
-[`frontend/PLATFORM.md`](frontend/PLATFORM.md) for the product.
-[`program/IMPLEMENTATION.md`](program/IMPLEMENTATION.md) records what was verified and
-measured, and what is deliberately still open.
+## Tech stack
 
----
+| Layer | Technology |
+|---|---|
+| On-chain program | Rust 1.79 SBF · Anchor 0.31.1 · Solana 2.1.7 |
+| Lending integration | Kamino KLend CPI · direct account-layout adapter |
+| Frontend | Next.js 16.3.1 · React 19 · TypeScript 5 · Tailwind CSS 4 |
+| Data and wallet | JSON-RPC · TanStack Query · `@solana/web3.js` 1.98 |
+| Product UI | MDX · Motion · deterministic chat commands · optional LLM fallback |
+| Testing | Rust unit tests · proptest · LiteSVM · Node test runner through `tsx` |
 
-## Running it
+## Quick start
 
-### The web app
+### Prerequisites
 
-Everything on the front end runs with no keys and no cluster.
+- Node.js 20+
+- Yarn 1.22
+- Rust and Cargo
+- Solana CLI 2.1.7 with the SBF toolchain
+
+### Run the web app
 
 ```bash
-cd frontend
-yarn install
-yarn dev            # http://localhost:3000
+git clone https://github.com/Pavlentiyys/brace-solana.git
+cd brace-solana/frontend
+yarn install --frozen-lockfile
+yarn dev
 ```
 
-Open `http://localhost:3000/app`. Without a wallet extension you get the demo world;
-with Phantom you get your own Kamino positions off devnet.
+Open `http://localhost:3000` for the landing page or `http://localhost:3000/app` for the application. The demo wallet and simulator need no credentials and do not submit transactions.
 
-Optional configuration:
+Brace defaults to Solana devnet. The public RPC works for light testing; configure a dedicated endpoint for repeated polling:
 
-| Variable | Meaning |
-|---|---|
-| `NEXT_PUBLIC_BRACE_CLUSTER` | `devnet` (default), `testnet` or `mainnet-beta`. |
-| `NEXT_PUBLIC_BRACE_RPC_URL` | Your own endpoint. The public one rate limits quickly. |
-| `NEXT_PUBLIC_BRACE_PROGRAM_ID` | Set once the program is deployed. |
+```dotenv
+# frontend/.env.local
+NEXT_PUBLIC_BRACE_CLUSTER=devnet
+NEXT_PUBLIC_BRACE_RPC_URL=https://your-devnet-rpc.example
+```
 
-### The program
+The devnet program ID is compiled into the client and pinned against the Rust source and IDL by tests. Free-form chat outside the deterministic commands optionally uses one of the server-only credentials documented in [`frontend/.env.example`](frontend/.env.example).
 
-Needs the Rust toolchain, the Solana CLI 2.1.7 and Anchor 0.31.1.
+### Build and test the program
 
 ```bash
 cd program
-cargo test --workspace                    # 42 unit tests, proptest, shared vectors
+
+cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 
 cargo build-sbf --manifest-path programs/guard/Cargo.toml
 cargo build-sbf --manifest-path tests/mock-klend/Cargo.toml
-cargo test --manifest-path tests/litesvm-harness/Cargo.toml   # 45 tests
+cargo test --manifest-path tests/litesvm-harness/Cargo.toml
 ```
 
-> `anchor build` is **not** the supported path here: the installed `anchor-cli` and
-> the pinned `Anchor.toml` version differ. Use `cargo build-sbf` directly. If a build
-> fails with `feature 'edition2024' is required`, read the dependency-pinning section
-> of [`IMPLEMENTATION.md`](program/IMPLEMENTATION.md) before touching the toolchain.
+Use `cargo build-sbf`, not `anchor build`. The repository pins Anchor dependencies to 0.31.1 and Solana to 2.1.7, while newer globally installed Anchor CLIs may resolve a different toolchain. Dependency-pin details are in [`program/IMPLEMENTATION.md`](program/IMPLEMENTATION.md).
 
-One optional test runs the guard's CPI against the **real** KLend binary. It skips
-when the 10 MB ELF is absent:
+To run the optional CPI test against the real KLend binary:
 
 ```bash
 solana program dump -u m KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD \
-    tests/litesvm-harness/fixtures/klend.so
+  tests/litesvm-harness/fixtures/klend.so
 ```
 
----
+Without that 10 MB ELF, the test reports a skip and the rest of the suite remains offline-capable.
 
-## Using it
+### Open a real devnet position
 
-`/app` is a conversation. Ask in plain words; the bot answers with the actual panels
-rather than paragraphs describing them.
+The existing Kamino devnet markets do not expose usable collateral that this project can distribute, so `tools/devnet` creates a dedicated KLend market with test mints and live Pyth prices.
 
-**1. Connect.** Phantom is used whenever it is installed. Set Phantom to Devnet under
-Settings → Developer Settings: an address is the same on every cluster, but balances
-and simulation are not. Without an extension, the demo wallet opens a world that runs
-in the browser tab, resets on reload, and can be made to fail on demand.
+```bash
+cd tools/devnet
+npm install
+npm run inspect
+npm run market
+npx tsx src/seed.ts
+npx tsx src/patch-borrow-limit.ts
+npx tsx src/open-position.ts 2 100
+```
 
-**2. Ask about the position.** "How close am I to liquidation?" returns your LTV, the
-liquidation threshold, and the gap between them. If Kamino has not refreshed the
-position since its last transaction, the bot says so *before* it gives you the number.
-
-**3. Set a rule.** The authorization screen lists what the agent will be able to do,
-generated from the program's own limits rather than written by hand.
-
-**4. Fund the reserve, and take it back whenever you want.** The withdraw instruction
-checks your signature and nothing else.
-
-The bot understands roughly: `positions`, `status`, `reserve`, `authorize`, `history`,
-`pause`, `resume`, `revoke`, `wallet`, `help` — in your own phrasing, or as
-`/commands`. When nothing matches, it says so and lists what it does understand. It
-never guesses at something that moves money.
-
-### Which world you are in
-
-The world follows the wallet, and the two never mix:
-
-| Wallet | Positions | Writes |
-|---|---|---|
-| Phantom | Real, read from Kamino on the configured cluster | Blocked until the program is deployed |
-| Demo wallet | A world in your browser tab | Simulated, including the failure paths |
-
-A fabricated position under somebody's own address is the one combination that could
-mislead them about their own money, so it is not offered.
-
----
-
-## Technologies
-
-**On chain**
-
-- **Rust** with **Anchor 0.31.1**, built for **Solana 2.1.7** (SBF, Rust 1.79)
-- **No Kamino SDK.** The KLend account layout and the `repay_obligation_liquidity_v2`
-  CPI are implemented directly in `adapter/kamino.rs`, so a Kamino SDK release cannot
-  break the build. The offsets are pinned against committed mainnet bytes.
-- **`uint`** for 256-bit intermediates, because Kamino's `U68F60` fixed-point values
-  overflow `u128` when multiplied
-- **LiteSVM** for the negative-case suite, **proptest** for the two properties ТЗ §10
-  requires: LTV never increases, and funds only ever reach the reserve's supply vault
-
-**Web**
-
-- **Next.js 16** (App Router, Turbopack), **React 19**, **TypeScript 5**
-- **Tailwind CSS v4**, **Motion** for animation, **MDX** for the docs
-- **TanStack Query** for the polling and cache layer
-- **No wallet adapter.** Phantom is reached through its own injected provider, in one
-  ~200 line module that covers detection, eager reconnect and account switching. A
-  full adapter brings a modal, an autoconnect state machine and a wallet list, none of
-  which can be exercised until there is a program to sign against.
-- **web3.js on the write path only.** Reads are plain JSON-RPC `fetch`; the account
-  decoding is in `lib/platform/kamino.ts`. Signing needs a real `Transaction` for
-  Phantom, so web3.js is imported by one module. Still no Anchor in the browser.
-- `node:test` through **tsx** for the suite
-
----
+See [`tools/devnet/README.md`](tools/devnet/README.md) before running these scripts. They use the configured Solana keypair and submit real devnet transactions.
 
 ## Testing
 
-| Suite | Count | What it establishes |
+| Suite | Tests | What it covers |
 |---|---:|---|
-| `program` unit + proptest | 42 | Policy validation, LTV maths, shared vectors, the two fuzz properties |
-| `program` LiteSVM | 45 | Every negative case as a real transaction, layout regressions, real KLend |
-| `frontend` | 213 | LTV contract, guard state, the Kamino decoder, the bot, the published program id |
+| Guard unit + property tests | 42 | Policy validation, fixed-point math, replay checks, exit invariants and shared vectors |
+| LiteSVM harness | 45 | Negative cases, real transactions, external layouts, mock KLend CPI and optional real KLend CPI |
+| Frontend | 213 | LTV parity, policy validation, instruction encoding, account decoding, wallet behavior, chat and simulations |
+| **Total** | **300** | Current locally verified suite |
 
-Two things worth calling out.
+The shared vectors in [`program/vectors/ltv-bps.json`](program/vectors/ltv-bps.json) are consumed by both Rust and TypeScript tests. A rounding or fixed-point drift between the program and frontend therefore fails the suite.
 
-**The LTV formula lives in four implementations and they are pinned to each other.**
-[`program/vectors/ltv-bps.json`](program/vectors/ltv-bps.json) is read by a Rust test
-and by a TypeScript test, so a drift in either turns exactly one of them red.
+## Current status
 
-**The guard's CPI is verified against the real KLend program**, not only against a
-mock. `tests/real_klend.rs` loads mainnet's actual KLend binary into LiteSVM with real
-market and reserve accounts, and asserts that the repay goes through — 169,024 compute
-units for the guard plus the repay, which is why a client must prepend an explicit
-`ComputeBudget` instruction.
+| Item | Status |
+|---|---|
+| Program | Deployed on Solana devnet at [`CCSV…aVaY`](https://solscan.io/account/CCSVvtVuDpH1wCCQWExCpdmZ1sqUBabJA1QQGai7aVaY?cluster=devnet) |
+| Mainnet | Not deployed |
+| Audit | Not audited; an independent audit is required before real funds |
+| Automated service | Reference watcher exists, but no hosted keeper or public liveness service is provided |
+| Supported action | `REPAY` only; collateral top-up is a v2 design |
+| Position model | One owner, one Kamino obligation and one configured debt reserve per guard |
 
----
+Additional limitations:
 
-## Opening a test position
+- `init_guard` requires an existing, freshly updated borrow in the configured reserve.
+- The frontend’s chain path is designed and tested for devnet; other clusters should be treated as unsupported deployments.
+- Committed KLend account fixtures are snapshots. They must be refreshed when the pinned external layout changes.
+- A healthy policy does not guarantee that a position survives. The reserve can run out, the market can gap through the trigger, and repaying early can underperform other choices.
+- The simulator includes adverse scenarios deliberately; it is not a forecast or a profitability claim.
 
-The Kamino markets that already exist on devnet cannot be borrowed from: every usable
-collateral is a test mint whose authority belongs to somebody else, and the one real
-wrapped SOL reserve is set to 0% loan-to-value and hidden. So `tools/devnet` creates a
-market — a genuine KLend market on live Pyth prices — where the mint authority is ours
-and the collateral can be handed out.
+## Roadmap
 
-```bash
-cd tools/devnet && npm install
-npm run market                      # mints, market, two reserves
-npx tsx src/seed.ts                 # first price refresh, funds the debt side
-npx tsx src/patch-borrow-limit.ts
-npx tsx src/fund.ts <your address>  # collateral, no signature needed from you
-```
+- [x] Policy-constrained Anchor guard
+- [x] Direct Kamino KLend repay CPI
+- [x] Devnet deployment and reproducible KLend test market
+- [x] Demo world, simulator and wallet-connected web app
+- [x] Shared Rust/TypeScript vectors and 300-test suite
+- [x] Reference watcher for delegated execution
+- [ ] Hosted watcher, liveness endpoint and failure notifications
+- [ ] Continuous integration for all three test suites
+- [ ] Independent security audit
+- [ ] Mainnet deployment
+- [ ] v2 collateral top-up with an owner-authorized position model
 
-Then open the position in the app: ask the bot to "open a test borrow". It has to be
-your signature — KLend requires the obligation owner to sign the deposit and the
-borrow, so nobody can open a position on somebody else's behalf.
+## Resources
 
-## Known limits
-
-- **v1 repays debt and nothing else.** `TOP_UP` needs the owner's signature and a
-  wrapped-obligation model; the program rejects the flag rather than accepting one
-  that does nothing.
-- **`init_guard` requires an existing borrow** in the configured reserve, and an
-  obligation that has been refreshed.
-- **No watcher runs yet.** `lib/core/liveness.ts` models the staleness the panel
-  reports, but nothing is calling the chain on a schedule, so the last check reads
-  as unknown rather than as healthy.
-- **The agent does not always help**, and the simulator is built to show it. The
-  landing page runs three branches: the agent acting, nobody acting, and the same
-  reserve spent on the debt up front. That third branch is the honest comparison —
-  nobody leaves money idle beside a loan they are worried about — and the agent
-  loses to it in the fall with no rebound.
-- **Liquidation is modelled at Kamino's 25% close factor.** An earlier version
-  closed the whole position, which only ever hit the branch with no agent and
-  overstated what the agent was worth by 78% in the scenario the page leads with.
+- [Guard program specification](program/README.md)
+- [Implementation notes, account offsets and compute measurements](program/IMPLEMENTATION.md)
+- [Frontend product specification](frontend/PLATFORM.md)
+- [Landing and documentation specification](frontend/LANDING.md)
+- [Devnet market tooling](tools/devnet/README.md)
+- [Committed Anchor IDL](program/idl/guard.json)
+- [Kamino](https://kamino.finance)
+- [Solana](https://solana.com)
 
 ## License
 
-MIT, as declared in `program/Cargo.toml`.
+MIT, as declared in [`program/Cargo.toml`](program/Cargo.toml).

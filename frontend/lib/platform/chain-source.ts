@@ -378,6 +378,13 @@ export function createChainSource(config: PlatformConfig, signer: Signer | null 
     canWrite: PROGRAM_IS_DEPLOYED && signer !== null,
     snapshot,
     async authorize({ obligation, policy }) {
+      // Checked here rather than only on the screen, so every caller gets the
+      // same answer. Building the instruction anyway costs the user a wallet
+      // prompt that the wallet has already simulated and knows will fail.
+      const existing = await fetchGuards(config, signer?.address ?? "").catch(() => []);
+      const guard = existing.find((candidate) => candidate.obligation === obligation);
+      if (guard) return { ok: false, failure: { kind: "guard_exists", guard: guard.address } };
+
       const agent = new PublicKey(DEVNET_MARKET.agent);
       return send((accounts) => initGuardIx(accounts, agent, policy), obligation);
     },
@@ -430,6 +437,13 @@ function asWriteFailure(error: unknown): Failure {
 
   if (error !== null && typeof error === "object" && "code" in error && error.code === 4001) {
     return { kind: "wallet_rejected" };
+  }
+
+  // Anchor's `init` on a PDA that already exists fails in the System Program,
+  // not in ours, so it never carries a guard error code. Without this it lands
+  // in `unknown` and the user is shown whatever the wallet called it.
+  if (/already in use|account already exists/i.test(message)) {
+    return { kind: "guard_exists", guard: "" };
   }
 
   const custom = /custom program error: 0x([0-9a-f]+)/i.exec(message);

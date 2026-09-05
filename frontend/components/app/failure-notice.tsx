@@ -47,9 +47,16 @@ function describe(failure: Failure): { title: string; body: string; detail?: str
   }
 }
 
-/** Everything except a dismissed wallet prompt is worth an alarm colour. */
+/**
+ * Everything except a dismissed wallet prompt is worth an alarm colour.
+ *
+ * `guard_exists` is not an alarm either: nothing was sent and the authorization
+ * the user was worried about is the one already protecting them.
+ */
 function toneOf(failure: Failure): "warn" | "danger" {
-  return failure.kind === "wallet_rejected" || failure.kind === "program_not_deployed"
+  return failure.kind === "wallet_rejected" ||
+    failure.kind === "program_not_deployed" ||
+    failure.kind === "guard_exists"
     ? "warn"
     : "danger";
 }

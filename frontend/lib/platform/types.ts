@@ -64,6 +64,13 @@ export type Failure =
   | { kind: "price_stale"; publishedAt: number }
   | { kind: "congested"; retryable: true }
   | { kind: "authorization_expired" }
+  /**
+   * `init_guard` was asked for a position that already has one. Anchor's `init`
+   * fails on an existing PDA, and it fails during the wallet's simulation, so
+   * the user meets it as a scary "unsafe transaction" prompt followed by
+   * whatever generic string the wallet chose. It is a state, not an error.
+   */
+  | { kind: "guard_exists"; guard: string }
   | { kind: "program_error"; code: number }
   | { kind: "program_not_deployed" }
   | { kind: "invalid_policy"; messages: string[] }
