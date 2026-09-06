@@ -1,8 +1,8 @@
 /**
  * A guard that runs in the browser.
  *
- * The program is not deployed, so this is what the panel talks to. It is a real
- * implementation of the same interface the chain source implements, not a set of
+ * This source powers the browser demo world. It is a real implementation of the
+ * same interface the chain source implements, not a set of
  * fixed screenshots: the price moves, the watcher reports, the rule fires when LTV
  * reaches the trigger, the reserve goes down when it does, and every button on the
  * panel changes the state the next read returns.

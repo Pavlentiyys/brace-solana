@@ -15,12 +15,13 @@ services that are still planned.
 | Browser chat and deterministic commands | Implemented |
 | Demo wallet and failure simulation | Implemented |
 | Phantom connection and devnet reads | Implemented |
-| Guard authorization, reserve, pause, and revoke transactions | Implemented |
+| Guard authorization, reserve, pause, revoke, and owner repayment transactions | Implemented |
+| Repayment schedules and crypto analytics | Implemented |
 | Devnet faucet and test-position flow | Implemented |
 | Hosted watcher and public liveness endpoint | Not provided |
 | Indexed on-chain action history | Not provided |
 | Telegram bot | Product direction, not implemented in this repository |
-| Mainnet support | Not deployed or supported |
+| Mainnet support | Not supported |
 
 The frontend must not imply that a planned service is live. Unknown watcher status,
 missing indexed history, and unsupported actions are rendered as explicit states.
@@ -35,8 +36,9 @@ The user should be able to answer two questions before signing:
 - What can it never do?
 
 The authorization screen builds its capability list from constants mirrored from the
-program and pinned by tests. The current program permits repayment only. Collateral
-top-up is marked as v2 and cannot be authorized by the current UI.
+program and pinned by tests. The current program permits debt repayment, including an
+optional fixed-interval schedule. Collateral top-up is marked as v2 and cannot be
+authorized by the current UI.
 
 ### 2. Keep wallet operations narrow
 
@@ -47,6 +49,8 @@ only when an operation changes state:
 - fund the reserve;
 - withdraw the reserve;
 - pause, resume, or revoke the guard;
+- repay from the reserve as the owner;
+- configure or clear a repayment schedule;
 - open and refresh a test position on devnet.
 
 Every proposed action is described before the wallet opens.
@@ -114,11 +118,12 @@ boundaries and limitations appear before marketing claims.
 
 | Route | Purpose |
 |---|---|
-| `/app` | Chat-first position overview and command entry point |
-| `/app/authorize` | Review and sign a guard policy |
-| `/app/reserve` | Fund or withdraw the guard reserve |
-| `/app/history` | Display available action receipts |
-| `/app/faucet` | Request devnet SOL |
+| `/chat` | Chat-first position overview and command entry point |
+| `/chat/authorize` | Review and sign a guard policy |
+| `/chat/reserve` | Fund or withdraw the guard reserve |
+| `/chat/history` | Display available action receipts |
+| `/chat/analytics` | Inspect exposure, market data, and risk readouts |
+| `/chat/faucet` | Request devnet SOL |
 
 The application is designed mobile-first and must remain usable at 375 px without
 horizontal page scrolling.
@@ -131,7 +136,7 @@ horizontal page scrolling.
 2. Change collateral, debt, reserve, or market scenario inputs.
 3. Compare the position with the agent, without the agent, and with the reserve
    repaid up front.
-4. Open `/app` with the demo wallet.
+4. Open `/chat` with the demo wallet.
 5. Trigger failure states deliberately before connecting a real wallet.
 
 ### Inspect a real position
@@ -189,7 +194,7 @@ Each step is signed by the obligation owner because KLend requires that authorit
 
 ## Browser chat
 
-The `/app` conversation maps plain-language requests and slash commands to the same
+The `/chat` conversation maps plain-language requests and slash commands to the same
 screens used by direct navigation.
 
 Supported deterministic intents include:
@@ -200,6 +205,7 @@ Supported deterministic intents include:
 - history;
 - pause and resume;
 - revoke;
+- repay now and scheduled repayment;
 - wallet and help.
 
 When an input does not match a known command, the assistant lists what it understands
@@ -345,7 +351,7 @@ they cannot, the interface has failed its primary trust requirement.
 - hosted watcher and heartbeat endpoint;
 - indexed chain receipts and explorer-linked history;
 - immediate notification when an automated action fails;
-- production-ready independent exit instructions;
+- independent exit instructions for the deployed program;
 - Telegram or another external notification interface;
 - audited mainnet deployment;
 - v2 collateral top-up with an owner-authorized position model.

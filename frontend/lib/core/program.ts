@@ -13,15 +13,15 @@
  */
 
 /**
- * The deployed guard, on devnet.
+ * The deployed guard on devnet.
  *
  * Mirrors `declare_id!` in `programs/guard/src/lib.rs`. The interface reads this
- * rather than hiding it: while it was Anchor's placeholder every write said so on
- * screen instead of opening a wallet prompt that could not succeed.
+ * rather than hiding it: the UI can identify the deployment before offering a
+ * wallet prompt.
  */
 export const PROGRAM_ID = "CCSVvtVuDpH1wCCQWExCpdmZ1sqUBabJA1QQGai7aVaY";
 
-/** False while `PROGRAM_ID` is a placeholder rather than a deployed address. */
+/** False only when the configured program is not deployed. */
 export const PROGRAM_IS_DEPLOYED = true;
 
 export const SEED_GUARD = "guard";

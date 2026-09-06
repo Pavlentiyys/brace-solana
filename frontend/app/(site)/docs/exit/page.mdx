@@ -1,53 +1,61 @@
-export const metadata = {
-  title: "How to take everything and leave",
-  description:
-    "Revoke authorization, withdraw the reserve, unlink the bot, and how to get your money out if Brace stops running.",
-};
-
 # How to take everything and leave
 
-This page exists because you should be able to read it before you decide to start. Leaving takes three steps and none of them depends on our permission.
+Leaving takes two on-chain steps. Both are signed by the wallet that owns the
+authorization. Brace never holds that wallet's keys.
 
-## 1. Revoke authorization
+## Revoke authorization
 
-**In the web app:** open the position panel and use **Revoke authorization**. One click, no confirmation chain, no exit survey. The transaction removes the agent's permission to act on your position.
+**In the web app:** open the position panel at `/chat` and choose **Revoke
+authorization**. The transaction removes the agent's permission to act on this
+position.
 
-**In the bot:** send `/revoke`. It runs immediately and does not ask you to confirm.
+**In the chat:** send `/revoke`. The chat opens the same owner-signed operation.
 
-After this the agent cannot add collateral or repay debt for you. Your position is untouched: the same collateral, the same debt, the same liquidation price it had a second earlier. What changes is that nothing acts on it automatically any more.
+Revoking does not change your collateral, debt, liquidation price, or reserve. It
+only prevents the delegated agent from submitting another action.
 
-## 2. Withdraw reserve
+## Withdraw the reserve
 
-Use **Withdraw reserve** in the web app. The reserve is your money held in an account you own, and this instruction is not gated on anything:
+Open **Fund or withdraw** from the position panel, or go directly to
+`/chat/reserve`. Choose **Withdraw the reserve** and sign with the owner wallet.
 
-- It works while the agent is paused.
-- It works after the authorization has expired.
-- It works after you have revoked authorization.
-- It works while your position is unhealthy.
+The program deliberately does not gate withdrawal on the guard state. It works when
+the agent is:
 
-There is no state the program can be in where your reserve is stuck. If you find one, that is a bug and it is the most serious kind we can have.
+- paused;
+- expired;
+- revoked; or
+- looking at an unhealthy position.
 
-## 3. Unlink the bot
+The reserve is held by the guard vault, not by the agent key. Withdrawing does not
+require the agent, a watcher, or a Brace server to be running.
 
-Send `/unlink` to the bot. It stops watching your address and deletes the link between your chat and your wallet.
+## Disconnect the wallet
 
-This is separate from step 1 on purpose. Some people revoke authorization and keep the bot for read-only alerts, which is the whole of Stage 0.
+After the on-chain steps are complete, use **Disconnect** in the header if you want
+to remove the wallet connection from this browser. Disconnecting is local session
+control. It does not revoke an authorization or alter the position.
 
-## If Brace is gone
+## If Brace is unavailable
 
-The three steps above go through our interfaces. They are convenient, not necessary. The reserve sits in a program account that you own, and the withdraw instruction checks your signature and nothing else, so you can call it directly with the Solana CLI and Anchor:
+The deployed program is on Solana devnet at
+`CCSVvtVuDpH1wCCQWExCpdmZ1sqUBabJA1QQGai7aVaY`. The owner can call
+`withdraw_reserve` directly through any Solana client that supports Anchor
+instructions.
 
-```
-anchor idl fetch <PROGRAM_ID> --provider.cluster mainnet > brace.json
-# then call withdraw_reserve with your own keypair as the authority
-```
+The instruction needs the guard PDA, its vault, the owner's token destination, the
+vault mint, the SPL token program, and the owner's signature. Passing `u64::MAX` as
+the amount asks the program to resolve and withdraw the entire current vault balance
+on chain, so a stale browser balance cannot make the request too large.
 
-**This command does not work yet.** The program has not been deployed, so there is no program ID to fetch an IDL from and no account to withdraw from. When it is deployed, this page gets the real program ID and a copy-pasteable command that has been run against mainnet.
+The repository contains the instruction encoder in
+`frontend/lib/core/tx/instructions.ts` and the account builder in
+`frontend/lib/platform/guard-tx.ts`. Use the devnet program ID and verify every
+account against the guard before signing. Do not paste a mainnet address into a
+devnet transaction.
 
-Publishing a placeholder here and calling it an escape hatch would be worse than admitting it is not ready. Until this section contains a command that works, treat the rest of the site as a description of what is being built.
+## What remains on chain
 
-## What we keep
-
-If you unlink the bot we delete the association between your chat and your address. We do not hold your keys at any point, so there is nothing there to delete.
-
-Your on-chain history stays on chain. That is not ours to remove and nobody can remove it, including you.
+Disconnecting the wallet does not delete on-chain history. Revoking removes the
+agent's authority, and withdrawing moves the reserve back to the owner's token
+account. Neither operation deletes the Kamino position.

@@ -4,7 +4,6 @@ import { Wordmark } from "@/components/site/mark";
 import { WalletButton } from "@/components/site/wallet-button";
 import { Container } from "@/components/ui/section";
 import { en } from "@/content/en";
-import { site } from "@/content/site";
 
 /**
  * One header for the whole site.
@@ -15,9 +14,8 @@ import { site } from "@/content/site";
  * until you were already inside.
  *
  * So the shell is identical everywhere and the wallet is always reachable. The
- * chat's own navigation (position, history, authorization) lives in its own row
- * below this one, because those destinations need a connected wallet and would
- * be dead links on the landing page.
+ * primary destinations live here; chat-specific navigation is not duplicated below
+ * it, so the conversation keeps its vertical space.
  */
 export function SiteHeader() {
   return (
@@ -56,14 +54,12 @@ export function SiteHeader() {
             >
               {en.nav.app}
             </Link>
-            <a
-              href={site.links.github}
-              target="_blank"
-              rel="noreferrer noopener"
+            <Link
+              href="/chat/analytics"
               className="whitespace-nowrap rounded-panel text-[13px] text-ink-dim transition-colors duration-300 hover:text-ink"
             >
-              GitHub
-            </a>
+              {en.nav.analytics}
+            </Link>
           </nav>
 
           <div className="flex justify-end">

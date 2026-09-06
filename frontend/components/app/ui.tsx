@@ -50,8 +50,9 @@ export function Row({
   return (
     <div className="flex items-baseline justify-between gap-3 py-1.5">
       <dt className="text-[13px] text-ink-dim">{label}</dt>
+      {" "}
       <dd className="flex items-baseline gap-2 text-right">
-        {hint ? <span className="text-[11px] text-ink-faint">{hint}</span> : null}
+        {hint ? <span className="text-[11px] text-ink-faint">{hint}{" "}</span> : null}
         <span className="num text-[13px] text-ink">{value}</span>
       </dd>
     </div>

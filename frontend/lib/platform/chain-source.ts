@@ -2,19 +2,19 @@
  * The same interface, against a real cluster.
  *
  * Tracking a borrow and acting on one are different privileges, and this file
- * reflects that. Reading a Kamino position needs nothing of ours deployed: the
- * obligations are Kamino's accounts. So the read path is live today, and only the
- * writes wait for `declare_id!` to hold a real address.
+ * reflects that. Reading a Kamino position needs no Brace write transaction: the
+ * obligations are Kamino's accounts. The devnet guard is deployed, so configured
+ * wallets can use both the read and owner-signed write paths.
  *
  * What that buys is the thing PLATFORM.md 2.2 is actually about — showing somebody
  * their own position, with their own numbers, before asking them to authorize
  * anything. A guard is attached to a position when one exists and reported as absent
  * when it does not, which is a state the interface has to render either way.
  *
- * Writes are live now that the guard is deployed. They still report failure as a
- * value rather than a throw, because every one of them has a screen state and none
- * is exceptional — and while `PROGRAM_IS_DEPLOYED` was false they said so on screen
- * instead of opening a wallet prompt that could not succeed.
+ * Writes report failure as a value rather than a throw, because every one of them
+ * has a screen state and none is exceptional. If a deployment is disabled in a
+ * future configuration, the same boundary can report that state before opening a
+ * wallet prompt.
  */
 
 import {
@@ -199,7 +199,7 @@ export async function fetchReserves(
   return reserves;
 }
 
-/** The owner's guards, or none at all while the program id is a placeholder. */
+/** The owner's guards, or none when the selected position has no authorization. */
 export async function fetchGuards(config: PlatformConfig, owner: string): Promise<Guard[]> {
   if (!PROGRAM_IS_DEPLOYED) return [];
 

@@ -1,12 +1,19 @@
 "use client";
 
-import { Connection, PublicKey } from "@solana/web3.js";
+import { Connection, PublicKey, Transaction } from "@solana/web3.js";
 import { useState } from "react";
 
 import { ActionButton, Card, CardTitle, Note, Row, Rows } from "@/components/app/ui";
 import { en } from "@/content/en";
 import { explorerUrl } from "@/lib/platform/config";
-import { DEVNET_MARKET, marketAvailableOn, planOpenPosition, planRefresh } from "@/lib/platform/devnet-market";
+import {
+  DEVNET_MARKET,
+  marketAvailableOn,
+  planCloseRepay,
+  planCloseWithdraw,
+  planOpenPosition,
+  planRefresh,
+} from "@/lib/platform/devnet-market";
 import { usePlatform } from "@/lib/platform/provider";
 import { WalletCannotSign, WalletRejected } from "@/lib/platform/wallet";
 
@@ -28,12 +35,16 @@ const COLLATERAL_TOKENS = 2;
 const BORROW_TOKENS = 100;
 
 type Stage = "idle" | "depositing" | "borrowing" | "refreshing" | "done";
+type CloseStage = "idle" | "repaying" | "withdrawing" | "done";
 
 export function OpenPosition() {
   const { config, address, wallet, status } = usePlatform();
   const [stage, setStage] = useState<Stage>("idle");
   const [error, setError] = useState<string | null>(null);
   const [signatures, setSignatures] = useState<string[]>([]);
+  const [closeStage, setCloseStage] = useState<CloseStage>("idle");
+  const [closeError, setCloseError] = useState<string | null>(null);
+  const [closeSignatures, setCloseSignatures] = useState<string[]>([]);
 
   if (!marketAvailableOn(config.cluster)) {
     return (
@@ -104,7 +115,66 @@ export function OpenPosition() {
     }
   }
 
+  async function signCloseStep(
+    connection: Connection,
+    owner: PublicKey,
+    transaction: Transaction,
+  ) {
+    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+    transaction.recentBlockhash = blockhash;
+    transaction.feePayer = owner;
+
+    // A close operation is irreversible from the position's point of view. Show
+    // the user a simulation failure before Phantom opens a signing prompt.
+    const simulation = await connection.simulateTransaction(transaction);
+    if (simulation.value.err) {
+      const detail = simulation.value.logs?.slice(-3).join(" ");
+      throw new Error(`Close simulation failed.${detail ? ` ${detail}` : ""}`);
+    }
+
+    const signature = await wallet.signAndSend(transaction);
+    await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, "confirmed");
+    return signature;
+  }
+
+  async function close() {
+    if (!address) return;
+    setCloseError(null);
+    setCloseSignatures([]);
+
+    const connection = new Connection(config.rpcUrl, "confirmed");
+    const owner = new PublicKey(address);
+    const sent: string[] = [];
+
+    try {
+      const repay = await planCloseRepay({ connection, owner });
+      if (repay) {
+        setCloseStage("repaying");
+        sent.push(await signCloseStep(connection, owner, repay.transaction));
+        setCloseSignatures([...sent]);
+      }
+
+      // Re-read after repayment. The borrow entry disappears only after Kamino has
+      // processed that transaction, and the withdraw amount must come from the
+      // current obligation rather than a stale browser snapshot.
+      const withdraw = await planCloseWithdraw({ connection, owner });
+      if (withdraw) {
+        setCloseStage("withdrawing");
+        sent.push(await signCloseStep(connection, owner, withdraw.transaction));
+        setCloseSignatures([...sent]);
+      }
+
+      setCloseStage("done");
+    } catch (caught) {
+      setCloseStage("idle");
+      if (caught instanceof WalletRejected) setCloseError(en.app.openPosition.closeRejected);
+      else if (caught instanceof WalletCannotSign) setCloseError(en.app.openPosition.demoWallet);
+      else setCloseError((caught as Error).message);
+    }
+  }
+
   const busy = stage !== "idle" && stage !== "done";
+  const closeBusy = closeStage !== "idle" && closeStage !== "done";
 
   return (
     <Card>
@@ -119,11 +189,20 @@ export function OpenPosition() {
         <Row label="Market" value={`Kamino on ${config.clusterLabel}`} />
       </Rows>
 
-      <div className="mt-5 flex flex-wrap items-center gap-4">
+      <div className="mt-5 flex flex-wrap items-center gap-3">
         <ActionButton variant="primary" onClick={run} busy={busy} disabled={!connected || !canSign}>
           {stage === "idle" || stage === "done"
             ? en.app.openPosition.action
             : en.app.openPosition.stages[stage]}
+        </ActionButton>
+        <ActionButton
+          onClick={close}
+          busy={closeBusy}
+          disabled={!connected || !canSign || busy}
+        >
+          {closeStage === "idle" || closeStage === "done"
+            ? en.app.openPosition.closeAction
+            : en.app.openPosition.closeStages[closeStage]}
         </ActionButton>
         {!connected ? (
           <Note>{en.app.openPosition.needsWallet}</Note>
@@ -153,9 +232,33 @@ export function OpenPosition() {
         </div>
       ) : null}
 
+      {closeSignatures.length > 0 ? (
+        <div className="mt-4 flex flex-col gap-1">
+          {closeSignatures.map((signature) => {
+            const url = explorerUrl({ ...config, mode: "chain" }, signature);
+            return (
+              <a
+                key={signature}
+                href={url ?? "#"}
+                rel="noreferrer noopener"
+                target="_blank"
+                className="num text-[12px] text-accent underline-offset-4 hover:underline"
+              >
+                {signature.slice(0, 24)}…
+              </a>
+            );
+          })}
+        </div>
+      ) : null}
+
       {stage === "done" ? <Note className="mt-4">{en.app.openPosition.done}</Note> : null}
+      <Note className="mt-4">{en.app.openPosition.closeNote}</Note>
+      {closeStage === "done" ? <Note className="mt-2">{en.app.openPosition.closeDone}</Note> : null}
       {error !== null ? (
         <p className="mt-4 text-[13px] leading-relaxed text-state-danger">{error}</p>
+      ) : null}
+      {closeError !== null ? (
+        <p className="mt-4 text-[13px] leading-relaxed text-state-danger">{closeError}</p>
       ) : null}
     </Card>
   );

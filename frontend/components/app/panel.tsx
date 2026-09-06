@@ -54,7 +54,7 @@ function LivenessLine({ lastCheckAt, now }: { lastCheckAt: number | null; now: n
     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
       <span className="flex items-center gap-2">
         <StatusDot tone={tone} />
-        <span className="text-[13px] text-ink-dim">{copy.liveness.label}</span>
+        <span className="text-[13px] text-ink-dim">{copy.liveness.label}{" "}</span>
         <span className="num text-[13px] text-ink">{agoLabel(secondsAgo)}</span>
       </span>
       <span
@@ -246,7 +246,16 @@ function Controls({ guard, obligation, now }: { guard: Guard; obligation: string
   return (
     <Card>
       <CardTitle>Controls</CardTitle>
-      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+      {/* One per row, not three across.
+          `ActionButton` sets `whitespace-nowrap`, so in a grid cell narrower than
+          its label the text ran out of the button and over its neighbour. These
+          three labels are sentences rather than verbs, and the panel is often
+          rendered inside a chat message at reading width, so there is no column
+          count that fits them side by side at every size.
+
+          `items-start` keeps each button the width of its own label instead of
+          stretching all three to the card, which would read as a menu. */}
+      <div className="mt-4 flex flex-col items-start gap-2.5">
         <ActionButton
           onClick={() => pause.mutate()}
           busy={pause.isPending}

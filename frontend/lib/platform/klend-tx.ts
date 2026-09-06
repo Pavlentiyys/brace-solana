@@ -4,7 +4,7 @@
  * Reading Kamino needs no library at all — `kamino.ts` decodes accounts by offset
  * over plain JSON-RPC. Writing needs a transaction, and a transaction needs an
  * assembler, so this is the one place `@solana/web3.js` earns its bundle weight. It
- * is imported only by the `/app` write path.
+ * is imported only by the `/chat` write path.
  *
  * There is still no Anchor here. An Anchor instruction is an 8-byte discriminator —
  * `sha256("global:" + snake_case_name)[..8]` — followed by borsh arguments, and every
@@ -31,6 +31,8 @@ export const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9
 export const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey(
   "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
 );
+export const FARMS_PROGRAM_ID = new PublicKey("FarmsPZpWu9i7Kky8tPN37rs2TpmMrAZrC7S7vJa91Hr");
+export const U64_MAX = 2n ** 64n - 1n;
 
 /** `sha256("global:" + name)[..8]`, cross-checked against Anchor's coder. */
 export const DISCRIMINATORS = {
@@ -40,6 +42,10 @@ export const DISCRIMINATORS = {
   refreshObligation: [33, 132, 147, 228, 151, 192, 72, 89],
   depositReserveLiquidityAndObligationCollateral: [129, 199, 4, 2, 222, 39, 26, 46],
   borrowObligationLiquidity: [121, 127, 18, 204, 73, 245, 225, 65],
+  repayObligationLiquidityV2: [116, 174, 213, 76, 180, 53, 210, 144],
+  withdrawObligationCollateralAndRedeemReserveCollateralV2: [
+    235, 52, 119, 152, 149, 197, 20, 7,
+  ],
 } as const;
 
 const SEEDS = {
@@ -278,5 +284,79 @@ export function borrowIx(input: {
       ro(SYSVAR_INSTRUCTIONS_PUBKEY),
     ],
     data: data(DISCRIMINATORS.borrowObligationLiquidity, u64(input.amount)),
+  });
+}
+
+/** Repays a borrow from the owner's own debt token account. */
+export function repayObligationLiquidityV2Ix(input: {
+  owner: PublicKey;
+  obligation: PublicKey;
+  market: PublicKey;
+  reserve: PublicKey;
+  liquidityMint: PublicKey;
+  amount: bigint;
+  /** The obligation's deposit reserves, passed as KLend remaining accounts. */
+  depositReserves: PublicKey[];
+}) {
+  const pdas = reserveAccounts(input.reserve);
+  return new TransactionInstruction({
+    programId: KLEND_PROGRAM_ID,
+    keys: [
+      sig(input.owner, false),
+      rw(input.obligation),
+      ro(input.market),
+      rw(input.reserve),
+      ro(input.liquidityMint),
+      rw(pdas.liquiditySupply),
+      rw(associatedTokenAddress(input.liquidityMint, input.owner)),
+      ro(TOKEN_PROGRAM_ID),
+      ro(SYSVAR_INSTRUCTIONS_PUBKEY),
+      // Optional farm accounts. Anchor's None convention is the KLend program id.
+      ro(KLEND_PROGRAM_ID),
+      ro(KLEND_PROGRAM_ID),
+      ro(marketAuthority(input.market)),
+      ro(FARMS_PROGRAM_ID),
+      ...input.depositReserves.map(rw),
+    ],
+    data: data(DISCRIMINATORS.repayObligationLiquidityV2, u64(input.amount)),
+  });
+}
+
+/** Withdraws all collateral and redeems it to the owner's underlying-token ATA. */
+export function withdrawObligationCollateralAndRedeemReserveCollateralV2Ix(input: {
+  owner: PublicKey;
+  obligation: PublicKey;
+  market: PublicKey;
+  reserve: PublicKey;
+  liquidityMint: PublicKey;
+  collateralAmount: bigint;
+}) {
+  const pdas = reserveAccounts(input.reserve);
+  return new TransactionInstruction({
+    programId: KLEND_PROGRAM_ID,
+    keys: [
+      sig(input.owner),
+      rw(input.obligation),
+      ro(input.market),
+      ro(marketAuthority(input.market)),
+      rw(input.reserve),
+      ro(input.liquidityMint),
+      rw(pdas.collateralSupply),
+      rw(pdas.collateralMint),
+      rw(pdas.liquiditySupply),
+      rw(associatedTokenAddress(input.liquidityMint, input.owner)),
+      // Optional destination collateral and farm accounts are absent.
+      ro(KLEND_PROGRAM_ID),
+      ro(TOKEN_PROGRAM_ID),
+      ro(TOKEN_PROGRAM_ID),
+      ro(SYSVAR_INSTRUCTIONS_PUBKEY),
+      ro(KLEND_PROGRAM_ID),
+      ro(KLEND_PROGRAM_ID),
+      ro(FARMS_PROGRAM_ID),
+    ],
+    data: data(
+      DISCRIMINATORS.withdrawObligationCollateralAndRedeemReserveCollateralV2,
+      u64(input.collateralAmount),
+    ),
   });
 }

@@ -167,7 +167,7 @@ export function AuthorizeScreen() {
       <Card>
         <CardTitle>{copy.verifyHeading}</CardTitle>
         <p className="mt-3 max-w-[70ch] text-[13px] leading-relaxed text-ink-dim">
-          {copy.verifyBody}
+          {copy.verifyBody.replace("{count}", String(Object.keys(DISCRIMINATORS).length))}
         </p>
         <p className="mt-4 text-[12px] uppercase tracking-[0.08em] text-ink-faint">
           {copy.instructionsLabel}
@@ -221,23 +221,25 @@ export function AuthorizeScreen() {
         />
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-4">
-        <ActionButton
-          variant="primary"
-          busy={authorize.isPending}
-          disabled={!entry || problems.length > 0 || existing !== null}
-          onClick={() =>
-            authorize.mutate(undefined, {
-              onSuccess: (outcome) => {
-                if (outcome.ok) router.push("/chat/reserve");
-              },
-            })
-          }
-        >
-          {authorize.isPending ? copy.submitting : copy.submit}
-        </ActionButton>
-        {authorize.data?.ok ? <span className="text-[13px] text-state-ok">{copy.done}</span> : null}
-      </div>
+      {!existing && !stranded ? (
+        <div className="flex flex-wrap items-center gap-4">
+          <ActionButton
+            variant="primary"
+            busy={authorize.isPending}
+            disabled={!entry || problems.length > 0}
+            onClick={() =>
+              authorize.mutate(undefined, {
+                onSuccess: (outcome) => {
+                  if (outcome.ok) router.push("/chat/reserve");
+                },
+              })
+            }
+          >
+            {authorize.isPending ? copy.submitting : copy.submit}
+          </ActionButton>
+          {authorize.data?.ok ? <span className="text-[13px] text-state-ok">{copy.done}</span> : null}
+        </div>
+      ) : null}
 
       {authorize.data && !authorize.data.ok ? (
         <FailureNotice failure={authorize.data.failure} />

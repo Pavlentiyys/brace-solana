@@ -111,9 +111,9 @@ export type Outcome =
 export interface GuardSource {
   readonly mode: PlatformMode;
   /**
-   * Whether this source can sign anything. False for a read-only chain source
-   * pointed at a program that is not deployed, which is the current state of the
-   * world and has to be said out loud rather than discovered at the wallet prompt.
+   * Whether this source can sign anything. False for a demo source or a chain source
+   * pointed at a program that is not deployed. The UI reports that before opening a
+   * wallet prompt.
    */
   readonly canWrite: boolean;
 

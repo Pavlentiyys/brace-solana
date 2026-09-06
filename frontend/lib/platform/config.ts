@@ -7,11 +7,10 @@
  * Phantom address while the panel still runs the demo world, and conflating the two
  * is what made connecting hand back a hardcoded address.
  *
- * Mode is demo unless an RPC endpoint is configured, and demo even then while the
- * program id is still Anchor's placeholder. The second condition is the one that
- * matters: pointing at a real cluster does not make a guard exist, and an app that
- * behaves as though it does would show an empty panel and let the user conclude their
- * position is unprotected for the wrong reason.
+ * Mode is demo unless an RPC endpoint is configured, and demo even then when the
+ * configured program is not deployed. Pointing at a real cluster does not make a
+ * guard exist, and an app that behaves as though it does would show an empty panel
+ * and let the user conclude their position is unprotected for the wrong reason.
  */
 
 import { PROGRAM_ID, PROGRAM_IS_DEPLOYED } from "@/lib/core/program";
@@ -20,9 +19,8 @@ import type { PlatformMode } from "@/lib/platform/types";
 export type Cluster = "devnet" | "testnet" | "mainnet-beta";
 
 /**
- * Devnet, deliberately. The program is not deployed anywhere yet, and a default of
- * mainnet would mean the first wallet prompt a developer sees is one against real
- * funds.
+ * Devnet, deliberately. The program is deployed on devnet, and a default of mainnet
+ * would mean the first wallet prompt a developer sees is one against real funds.
  */
 export const DEFAULT_CLUSTER: Cluster = "devnet";
 

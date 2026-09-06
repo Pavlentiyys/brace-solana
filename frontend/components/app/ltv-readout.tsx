@@ -108,21 +108,20 @@ export function LtvReadout({
         <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-[12px]">
           <span className="flex items-center gap-2 text-ink-dim">
             <StatusDot tone="neutral" />
-            {copy.triggerAt} <span className="num text-ink">{percentFromBps(triggerLtvBps)}</span>
+            {copy.triggerAt}{" "}<span className="num text-ink">{percentFromBps(triggerLtvBps)}</span>{" "}
             <span className="num text-ink-faint">
               {money(priceAtLtv(price, ltvBps, triggerLtvBps))}
             </span>
           </span>
           <span className="flex items-center gap-2 text-ink-dim">
             <StatusDot tone="danger" />
-            {copy.liquidationAt}{" "}
-            <span className="num text-ink">{percentFromBps(liquidationLtvBps)}</span>
+            {copy.liquidationAt}{" "}<span className="num text-ink">{percentFromBps(liquidationLtvBps)}</span>{" "}
             <span className="num text-ink-faint">
               {money(priceAtLtv(price, ltvBps, liquidationLtvBps))}
             </span>
           </span>
           <span className="flex items-center gap-2 text-ink-dim">
-            {copy.priceNow} <span className="num text-ink">{money(price)}</span>
+            {copy.priceNow}{" "}<span className="num text-ink">{money(price)}</span>{" "}
             <span className="num text-ink-faint">
               {(dropToLtv(ltvBps, liquidationLtvBps) * 100).toFixed(1)}% to liquidation
             </span>

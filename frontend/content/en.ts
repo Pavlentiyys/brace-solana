@@ -33,7 +33,7 @@ export const en = {
     // The answer to "will you take my money" has to be readable without
     // scrolling. LANDING.md section 1 puts this above everything else.
     subheadline:
-      "It adds collateral or repays debt from your reserve. It cannot send funds anywhere else.",
+      "It repays debt from your reserve when LTV reaches your trigger. It cannot send funds anywhere else.",
     cta: "Model your position",
     readout: {
       title: "Example position",
@@ -193,11 +193,7 @@ export const en = {
     docs: "Documentation",
     exit: "How to take everything and leave",
     program: "Program",
-    github: "Source",
-    audit: "Audit",
-    contact: "Contact",
-    status: "Service status",
-    notYet: "not published yet",
+    github: "GitHub",
     disclaimer:
       "Brace executes a rule you set. It does not predict prices and it does not guarantee that your position survives. Read the limits above before you use it.",
   },
@@ -263,15 +259,24 @@ export const en = {
         borrowing: "Borrowing",
         refreshing: "Refreshing",
       } as Record<string, string>,
+      closeAction: "Close test position",
+      closeStages: {
+        repaying: "Repaying test debt",
+        withdrawing: "Returning collateral",
+      } as Record<string, string>,
       signatures:
         "Three signatures: deposit, borrow, and a refresh so the numbers are current.",
+      closeNote:
+        "Two devnet transactions repay the test debt and return the collateral. There is no paid business operation. Solana network fees still need a small amount of devnet SOL; closing the obligation returns its account rent.",
       needsWallet: "Connect a wallet first.",
       demoWallet:
         "The demo wallet cannot sign. Connect Phantom to open a position on the cluster.",
       rejected: "You dismissed the wallet prompt. Nothing was sent.",
+      closeRejected: "You dismissed the wallet prompt. The test position was not closed.",
       wrongCluster:
         "This market lives on {cluster}. Point the chat there to open a position.",
       done: "Done. Ask how the position is doing and it will read back off the cluster.",
+      closeDone: "Closed. The test debt was repaid and the collateral was returned.",
     },
 
     proposal: {
@@ -477,7 +482,7 @@ export const en = {
       ],
       verifyHeading: "Check this rather than believe it",
       verifyBody:
-        "The program exposes six instructions. None of them transfers to an address you did not set. That is why the agent cannot do it, rather than a promise not to.",
+        "The program exposes {count} instructions. None of them transfers to an address you did not set. That is why the agent cannot do it, rather than a promise not to.",
       instructionsLabel: "Instructions in the program",
       notDeployed:
         "The program is not deployed yet, so there is no explorer link and nothing to sign. This screen shows what authorization will ask for.",
@@ -732,7 +737,7 @@ export const en = {
       {
         title: "How to take everything and leave",
         href: "/docs/exit",
-        summary: "Revoke authorization, withdraw the reserve, unlink the bot.",
+        summary: "Revoke authorization, withdraw the reserve, disconnect the wallet.",
         ready: true,
       },
       {

@@ -58,6 +58,8 @@ owner. It remains a v2 design and is rejected by the current policy validator.
 | `update_policy` | Owner | Replaces policy limits, changes the agent, and pauses or resumes execution |
 | `revoke` | Owner | Pauses the guard, expires it immediately, and clears all allowed actions |
 | `execute_action` | Agent | Validates the live position and performs the constrained KLend repayment CPI |
+| `owner_repay` | Owner | Repays from the reserve on the owner's signature, without agent policy limits |
+| `migrate_guard` | Owner | Expands an authorization written by an older account layout |
 
 There is no generic transfer instruction and no destination argument on
 `execute_action`.
@@ -227,7 +229,7 @@ Dedicated LiteSVM tests cover withdrawal after pause, expiry, and revocation.
 program/
   programs/guard/              on-chain Anchor workspace
     src/adapter/kamino.rs      KLend layout and CPI boundary
-    src/instructions/          six instruction handlers
+    src/instructions/          eight instruction handlers
     src/math.rs                pure fixed-point calculations
     src/state.rs               guard account and policy constants
   tests/litesvm-harness/       external transaction-level test workspace
@@ -284,7 +286,8 @@ supply vault.
 
 ## Known limitations
 
-- v1 supports debt repayment only. `TOP_UP` is rejected.
+- v1 supports debt repayment only. `TOP_UP` is rejected; scheduled repayment is a
+  separate debt-repayment grant with its own interval and amount cap.
 - One guard is tied to one owner, one obligation, and one debt reserve.
 - `init_guard` requires an existing borrow and a usable refreshed liquidation
   threshold.

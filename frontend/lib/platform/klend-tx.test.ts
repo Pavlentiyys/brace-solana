@@ -13,9 +13,11 @@ import {
   initObligationIx,
   marketAuthority,
   obligationAddress,
+  repayObligationLiquidityV2Ix,
   refreshObligationIx,
   refreshReserveIx,
   reserveAccounts,
+  withdrawObligationCollateralAndRedeemReserveCollateralV2Ix,
 } from "./klend-tx";
 import { DEVNET_MARKET } from "./devnet-market";
 
@@ -40,6 +42,9 @@ test("every discriminator is the anchor hash of its instruction name", () => {
     depositReserveLiquidityAndObligationCollateral:
       "deposit_reserve_liquidity_and_obligation_collateral",
     borrowObligationLiquidity: "borrow_obligation_liquidity",
+    repayObligationLiquidityV2: "repay_obligation_liquidity_v2",
+    withdrawObligationCollateralAndRedeemReserveCollateralV2:
+      "withdraw_obligation_collateral_and_redeem_reserve_collateral_v2",
   };
 
   for (const [key, snakeCase] of Object.entries(names)) {
@@ -183,6 +188,47 @@ test("the owner is the only signer on deposit and borrow", () => {
     assert.ok(signers[0].equals(OWNER));
     assert.ok(instruction.programId.equals(KLEND_PROGRAM_ID));
   }
+});
+
+test("repay v2 uses the owner's debt account and deposit reserves", () => {
+  const debtReserve = new PublicKey(DEVNET_MARKET.debt.reserve);
+  const collateralReserve = new PublicKey(DEVNET_MARKET.collateral.reserve);
+  const debtMint = new PublicKey(DEVNET_MARKET.debt.mint);
+  const instruction = repayObligationLiquidityV2Ix({
+    owner: OWNER,
+    obligation: obligationAddress(OWNER, MARKET),
+    market: MARKET,
+    reserve: debtReserve,
+    liquidityMint: debtMint,
+    amount: 99n,
+    depositReserves: [collateralReserve],
+  });
+
+  assert.equal(instruction.keys.length, 14);
+  assert.ok(instruction.keys[6].pubkey.equals(associatedTokenAddress(debtMint, OWNER)));
+  assert.ok(instruction.keys[13].pubkey.equals(collateralReserve));
+  assert.ok(instruction.keys[13].isWritable);
+  assert.equal(instruction.keys.filter((key) => key.isSigner).length, 1);
+  assert.ok(instruction.keys[0].pubkey.equals(OWNER));
+});
+
+test("withdraw v2 redeems collateral into the owner's collateral account", () => {
+  const collateralReserve = new PublicKey(DEVNET_MARKET.collateral.reserve);
+  const collateralMint = new PublicKey(DEVNET_MARKET.collateral.mint);
+  const instruction = withdrawObligationCollateralAndRedeemReserveCollateralV2Ix({
+    owner: OWNER,
+    obligation: obligationAddress(OWNER, MARKET),
+    market: MARKET,
+    reserve: collateralReserve,
+    liquidityMint: collateralMint,
+    collateralAmount: 2n,
+  });
+
+  assert.equal(instruction.keys.length, 17);
+  assert.ok(instruction.keys[9].pubkey.equals(associatedTokenAddress(collateralMint, OWNER)));
+  assert.ok(instruction.keys[9].isWritable);
+  assert.equal(instruction.keys.filter((key) => key.isSigner).length, 1);
+  assert.ok(instruction.keys[0].pubkey.equals(OWNER));
 });
 
 test("the borrow sends the tokens to the owner's own associated account", () => {

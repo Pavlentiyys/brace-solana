@@ -6,25 +6,9 @@ import { Container } from "@/components/ui/section";
 import { en } from "@/content/en";
 import { site } from "@/content/site";
 
-/**
- * A link whose destination may not exist yet. LANDING.md section 6 asks for
- * honest statuses, so an unknown destination renders as dimmed text with a
- * reason rather than as a link that goes nowhere.
- *
- * The note survives once the link appears. It used to render only in place of a
- * missing link, which meant deploying the program to devnet silently deleted the
- * words "not on mainnet" from the page and left a bare link a reader would take
- * for production.
- */
-function FooterItem({ label, href, note }: { label: string; href: string | null; note?: string }) {
-  const suffix = note ? <span className="text-[12px] text-ink-faint"> ({note})</span> : null;
-
+function FooterItem({ label, href }: { label: string; href: string | null }) {
   if (!href) {
-    return (
-      <li className="text-ink-faint">
-        {label} <span className="text-[12px]">({note ?? en.footer.notYet})</span>
-      </li>
-    );
+    return <li className="text-ink-faint">{label}</li>;
   }
 
   const external = href.startsWith("http");
@@ -38,7 +22,6 @@ function FooterItem({ label, href, note }: { label: string; href: string | null;
       >
         {label}
       </Link>
-      {suffix}
     </li>
   );
 }
@@ -71,15 +54,8 @@ export function SiteFooter() {
           </FooterColumn>
 
           <FooterColumn title="Project">
-            <FooterItem
-              label={en.footer.program}
-              href={site.program.explorerUrl}
-              note={site.program.status}
-            />
-            <FooterItem label={en.footer.audit} href={site.audit.reportUrl} note={site.audit.status} />
+            <FooterItem label={en.footer.program} href={site.program.explorerUrl} />
             <FooterItem label={en.footer.github} href={site.links.github} />
-            <FooterItem label={en.footer.status} href={site.links.status} />
-            <FooterItem label={en.footer.contact} href={site.links.contact} />
           </FooterColumn>
         </div>
 

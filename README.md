@@ -1,11 +1,13 @@
-![Brace — policy-constrained liquidation defense for Kamino](./.github/brace-banner.png)
+# BRACE
+
+![Brace - policy-constrained liquidation defense for Kamino](./.github/brace-banner.png)
 
 <div align="center">
 
 [![Solana](https://img.shields.io/badge/Solana-devnet-9945FF?logo=solana&logoColor=white)](https://solana.com)
 [![Anchor](https://img.shields.io/badge/Anchor-0.31.1-2E3440?logo=rust&logoColor=white)](https://www.anchor-lang.com)
 [![Next.js](https://img.shields.io/badge/Next.js-16.3.1-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org)
-[![Tests](https://img.shields.io/badge/tests-300%20passing-3fb950)](#testing)
+[![Tests](https://img.shields.io/badge/tests-314%20passing-3fb950)](#testing)
 [![Audit](https://img.shields.io/badge/audit-pending-d29922)](#scope)
 [![License](https://img.shields.io/badge/license-MIT-8a9099)](#license)
 
@@ -52,8 +54,8 @@ Before design started, these three problems were checked in informal conversatio
 
 ### On-chain guard
 
-- Six Anchor instructions: `init_guard`, `deposit_reserve`, `withdraw_reserve`, `update_policy`, `revoke` and `execute_action`.
-- Repay-only v1 policy with a trigger LTV, target LTV, per-action cap, cooldown, windowed action limit and expiry.
+- Eight Anchor instructions: `init_guard`, `deposit_reserve`, `withdraw_reserve`, `update_policy`, `revoke`, `execute_action`, `owner_repay` and `migrate_guard`.
+- Debt-repayment v1 policy with a trigger LTV, target LTV, per-action cap, cooldown, windowed action limit and expiry. An optional schedule grants fixed-interval repayments as a separate action.
 - Maximum delegation period of 90 days.
 - Guard and vault PDAs derived from the owner and Kamino obligation.
 - Direct KLend account decoding and `repay_obligation_liquidity_v2` CPI without a Kamino SDK dependency in the program.
@@ -65,8 +67,10 @@ Before design started, these three problems were checked in informal conversatio
 
 - Public liquidation simulator with recovery, short-wick and no-rebound scenarios.
 - Chat-first interface with deterministic commands for position, reserve, authorization, history, pause and revoke flows.
+- Analytics view for the connected crypto position, with market, exposure and risk readouts.
 - Browser demo world with explicit failure controls and no wallet required.
 - Phantom-based devnet reads and signing, including account-change and reconnect handling.
+- Owner-signed repayment from the reserve and owner-configured scheduled repayments.
 - Plain JSON-RPC decoding for Kamino positions; `@solana/web3.js` is isolated to transaction and wallet paths.
 - User-facing decoding of all Anchor guard errors.
 
@@ -235,14 +239,16 @@ See [`tools/devnet/README.md`](tools/devnet/README.md) before running these scri
 |---|---:|---|
 | Guard unit + property tests | 42 | Policy validation, fixed-point math, replay checks, exit invariants and shared vectors |
 | LiteSVM harness | 45 | Negative cases, real transactions, external layouts, mock KLend CPI and optional real KLend CPI |
-| Frontend | 213 | LTV parity, policy validation, instruction encoding, account decoding, wallet behavior, chat and simulations |
-| **Total** | **300** | Current locally verified suite |
+| Frontend | 227 | LTV parity, policy validation, instruction encoding, account decoding, wallet behavior, chat, analytics and simulations |
+| **Total** | **314** | Current locally verified suite |
 
 The shared vectors in [`program/vectors/ltv-bps.json`](program/vectors/ltv-bps.json) are consumed by both Rust and TypeScript tests. A rounding or fixed-point drift between the program and frontend therefore fails the suite.
 
 ## Scope
 
-Brace v1 guards one Kamino obligation per guard, with `REPAY` as the authorized action. Collateral top-up requires an owner signature on every action and is designed as v2.
+Brace v1 guards one Kamino obligation per guard. The agent can repay debt when the
+trigger is reached and can make a separately authorized scheduled repayment.
+Collateral top-up requires an owner signature on every action and is designed as v2.
 
 The program runs on Solana devnet at [`CCSV…aVaY`](https://solscan.io/account/CCSVvtVuDpH1wCCQWExCpdmZ1sqUBabJA1QQGai7aVaY?cluster=devnet) and is pending an independent security audit before mainnet.
 
@@ -252,7 +258,7 @@ The program runs on Solana devnet at [`CCSV…aVaY`](https://solscan.io/account/
 - [x] Direct Kamino KLend repay CPI
 - [x] Devnet deployment and reproducible KLend test market
 - [x] Demo world, simulator and wallet-connected web app
-- [x] Shared Rust/TypeScript vectors and 300-test suite
+- [x] Shared Rust/TypeScript vectors and 314-test suite
 - [x] Reference watcher for delegated execution
 - [ ] Hosted watcher, liveness endpoint and failure notifications
 - [ ] Continuous integration for all three test suites

@@ -14,6 +14,7 @@
 
 import { Connection, PublicKey, Transaction } from "@solana/web3.js";
 
+import { decodeObligation, type ObligationInfo } from "@/lib/platform/kamino";
 import {
   borrowIx,
   createAtaIdempotent,
@@ -21,8 +22,11 @@ import {
   initObligationIx,
   initUserMetadataIx,
   obligationAddress,
+  repayObligationLiquidityV2Ix,
   refreshObligationIx,
   refreshReserveIx,
+  U64_MAX,
+  withdrawObligationCollateralAndRedeemReserveCollateralV2Ix,
   userMetadata,
 } from "@/lib/platform/klend-tx";
 import raw from "@/lib/platform/devnet-market.json";
@@ -186,4 +190,113 @@ export async function planRefresh(input: {
   }
   transaction.add(refreshObligationIx(obligation, market, reserves));
   return transaction;
+}
+
+export interface ClosePositionPlan {
+  obligation: string;
+  transaction: Transaction;
+}
+
+/**
+ * Reads and validates the project's own test obligation before building a close
+ * transaction. The close button must never become a generic arbitrary-position
+ * withdrawer just because an account happens to share an owner.
+ */
+async function testObligation(
+  connection: Connection,
+  owner: PublicKey,
+): Promise<{ address: PublicKey; info: ObligationInfo }> {
+  const market = new PublicKey(DEVNET_MARKET.lendingMarket);
+  const address = obligationAddress(owner, market);
+  const account = await connection.getAccountInfo(address);
+
+  if (account === null) throw new Error("No test Kamino position was found for this wallet.");
+  const info = decodeObligation(address.toBase58(), account.data);
+  if (
+    !account.owner.equals(new PublicKey("KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD")) ||
+    info.owner !== owner.toBase58() ||
+    info.lendingMarket !== market.toBase58()
+  ) {
+    throw new Error("This is not the Brace devnet test position.");
+  }
+
+  return { address, info };
+}
+
+function assertTestPositionShape(info: ObligationInfo) {
+  const collateralReserve = DEVNET_MARKET.collateral.reserve;
+  const debtReserve = DEVNET_MARKET.debt.reserve;
+  if (
+    info.deposits.some((entry) => entry.reserve !== collateralReserve) ||
+    info.borrows.some((entry) => entry.reserve !== debtReserve) ||
+    info.deposits.length > 1 ||
+    info.borrows.length > 1
+  ) {
+    throw new Error("Close test position supports only the project's single-asset test position.");
+  }
+}
+
+/** Builds the first close step: repay the outstanding test debt in full. */
+export async function planCloseRepay(input: {
+  connection: Connection;
+  owner: PublicKey;
+}): Promise<ClosePositionPlan | null> {
+  const market = new PublicKey(DEVNET_MARKET.lendingMarket);
+  const reserve = new PublicKey(DEVNET_MARKET.debt.reserve);
+  const liquidityMint = new PublicKey(DEVNET_MARKET.debt.mint);
+  const { address, info } = await testObligation(input.connection, input.owner);
+  assertTestPositionShape(info);
+  if (info.borrows.length === 0) return null;
+
+  const refresh = await planRefresh({ connection: input.connection, owner: input.owner });
+  if (refresh === null) throw new Error("The test position has no refreshable reserves.");
+
+  const transaction = new Transaction().add(
+    createAtaIdempotent(input.owner, input.owner, liquidityMint),
+    ...refresh.instructions,
+    repayObligationLiquidityV2Ix({
+      owner: input.owner,
+      obligation: address,
+      market,
+      reserve,
+      liquidityMint,
+      amount: U64_MAX,
+      depositReserves: info.deposits.map((entry) => new PublicKey(entry.reserve)),
+    }),
+  );
+
+  return { obligation: address.toBase58(), transaction };
+}
+
+/** Builds the second close step: return all collateral, emptying the obligation. */
+export async function planCloseWithdraw(input: {
+  connection: Connection;
+  owner: PublicKey;
+}): Promise<ClosePositionPlan | null> {
+  const market = new PublicKey(DEVNET_MARKET.lendingMarket);
+  const reserve = new PublicKey(DEVNET_MARKET.collateral.reserve);
+  const liquidityMint = new PublicKey(DEVNET_MARKET.collateral.mint);
+  const { address, info } = await testObligation(input.connection, input.owner);
+  assertTestPositionShape(info);
+  if (info.borrows.length > 0) throw new Error("Repay the test debt before withdrawing collateral.");
+  const deposit = info.deposits[0];
+  if (!deposit || deposit.amount === 0n) return null;
+
+  const refresh = await planRefresh({ connection: input.connection, owner: input.owner });
+  if (refresh === null) throw new Error("The test position has no refreshable reserves.");
+
+  const transaction = new Transaction().add(
+    createAtaIdempotent(input.owner, input.owner, liquidityMint),
+    ...refresh.instructions,
+    withdrawObligationCollateralAndRedeemReserveCollateralV2Ix({
+      owner: input.owner,
+      obligation: address,
+      market,
+      reserve,
+      liquidityMint,
+      collateralAmount: deposit.amount,
+    }),
+  );
+
+  return { obligation: address.toBase58(), transaction };
 }
