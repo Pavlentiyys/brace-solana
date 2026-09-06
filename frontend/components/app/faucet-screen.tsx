@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
 
 import { ActionButton, Card, CardTitle, Note, PageHeading, StatusWord } from "@/components/app/ui";
 import { en } from "@/content/en";
@@ -203,6 +204,12 @@ export function FaucetScreen() {
               ) : null}
             </div>
           ) : null}
+        </div>
+
+        <div className="mt-5 border-t border-line pt-5">
+          <Link href="/chat/faucet/usdc" className="text-[12px] text-accent underline-offset-4 hover:underline">
+            {copy.usdcLink}
+          </Link>
         </div>
       </Card>
     </div>

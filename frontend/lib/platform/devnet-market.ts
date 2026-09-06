@@ -17,6 +17,7 @@ import { Connection, PublicKey, Transaction } from "@solana/web3.js";
 import { decodeObligation, type ObligationInfo } from "@/lib/platform/kamino";
 import {
   borrowIx,
+  associatedTokenAddress,
   createAtaIdempotent,
   depositIx,
   initObligationIx,
@@ -236,6 +237,13 @@ function assertTestPositionShape(info: ObligationInfo) {
   }
 }
 
+function formatBaseUnits(amount: bigint, decimals: number): string {
+  const scale = 10n ** BigInt(decimals);
+  const whole = amount / scale;
+  const fraction = (amount % scale).toString().padStart(decimals, "0").replace(/0+$/, "");
+  return fraction.length > 0 ? `${whole}.${fraction}` : whole.toString();
+}
+
 /** Builds the first close step: repay the outstanding test debt in full. */
 export async function planCloseRepay(input: {
   connection: Connection;
@@ -250,6 +258,31 @@ export async function planCloseRepay(input: {
 
   const refresh = await planRefresh({ connection: input.connection, owner: input.owner });
   if (refresh === null) throw new Error("The test position has no refreshable reserves.");
+
+  // Use Kamino's documented full-repay sentinel. It makes the program calculate the
+  // final interest-bearing debt after this transaction's refresh, instead of relying
+  // on the slightly older browser snapshot for the exact u64.
+  const borrowedAmountSf = info.borrows[0].amount;
+  const repayAmount = (borrowedAmountSf + (1n << 60n) - 1n) >> 60n;
+
+  // The refresh is part of the transaction, so the final interest-bearing amount
+  // can be a little higher than the value in the account snapshot we just read.
+  // Catch the common case before Phantom opens: SPL Token reports this as the
+  // unhelpful custom error 0x1 (insufficient funds).
+  const debtAta = associatedTokenAddress(liquidityMint, input.owner);
+  const debtAccount = await input.connection.getAccountInfo(debtAta);
+  const balance = debtAccount === null ? null : await input.connection.getTokenAccountBalance(debtAta);
+  const available = BigInt(balance?.value.amount ?? "0");
+  if (available < repayAmount) {
+    const shortfall = repayAmount - available;
+    throw new Error(
+      `Not enough ${DEVNET_MARKET.debt.label} to close this test position. ` +
+        `Kamino interest requires at least ${formatBaseUnits(repayAmount, DEVNET_MARKET.debt.decimals)} ` +
+        `but this wallet has ${formatBaseUnits(available, DEVNET_MARKET.debt.decimals)} ` +
+        `(${formatBaseUnits(shortfall, DEVNET_MARKET.debt.decimals)} short). ` +
+        `Top up test ${DEVNET_MARKET.debt.label} on devnet, then try again.`,
+    );
+  }
 
   const transaction = new Transaction().add(
     createAtaIdempotent(input.owner, input.owner, liquidityMint),

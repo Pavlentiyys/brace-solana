@@ -128,7 +128,17 @@ export function OpenPosition() {
     // the user a simulation failure before Phantom opens a signing prompt.
     const simulation = await connection.simulateTransaction(transaction);
     if (simulation.value.err) {
-      const detail = simulation.value.logs?.slice(-3).join(" ");
+      const logs = simulation.value.logs ?? [];
+      if (
+        logs.some((log) => log.includes("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")) &&
+        logs.some((log) => log.includes("0x1") || log.toLowerCase().includes("insufficient funds"))
+      ) {
+        throw new Error(
+          `Not enough ${DEVNET_MARKET.debt.label} to cover accrued interest. ` +
+            `Top up the test balance on devnet, then try closing again.`,
+        );
+      }
+      const detail = logs.slice(-3).join(" ");
       throw new Error(`Close simulation failed.${detail ? ` ${detail}` : ""}`);
     }
 

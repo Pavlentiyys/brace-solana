@@ -11,6 +11,7 @@ import { RepayNow } from "@/components/app/repay-now";
 import { ReserveScreen } from "@/components/app/reserve-screen";
 import { ScheduleScreen } from "@/components/app/schedule-screen";
 import { OpenPosition } from "@/components/app/open-position";
+import { WalletAccount } from "@/components/site/wallet-button";
 import { ActionProposal } from "@/components/chat/action-proposal";
 import { ThreadList } from "@/components/chat/thread-list";
 import { Note } from "@/components/app/ui";
@@ -493,15 +494,20 @@ export function Chat() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 md:flex-row md:gap-8">
-      <aside className="md:w-[220px] md:shrink-0 md:overflow-y-auto">
-        <ThreadList
-          threads={state.threads}
-          activeId={state.activeId}
-          now={now}
-          onSelect={selectThread}
-          onCreate={startThread}
-          onDelete={remove}
-        />
+      <aside className="flex min-h-0 flex-col md:w-[220px] md:shrink-0">
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <ThreadList
+            threads={state.threads}
+            activeId={state.activeId}
+            now={now}
+            onSelect={selectThread}
+            onCreate={startThread}
+            onDelete={remove}
+          />
+        </div>
+        <div className="mt-4 shrink-0 border-t border-line pt-4">
+          <WalletAccount />
+        </div>
       </aside>
 
       {undo ? (

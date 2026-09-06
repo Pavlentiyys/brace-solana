@@ -17,6 +17,7 @@ import {
   refreshObligationIx,
   refreshReserveIx,
   reserveAccounts,
+  U64_MAX,
   withdrawObligationCollateralAndRedeemReserveCollateralV2Ix,
 } from "./klend-tx";
 import { DEVNET_MARKET } from "./devnet-market";
@@ -200,7 +201,7 @@ test("repay v2 uses the owner's debt account and deposit reserves", () => {
     market: MARKET,
     reserve: debtReserve,
     liquidityMint: debtMint,
-    amount: 99n,
+    amount: U64_MAX,
     depositReserves: [collateralReserve],
   });
 
@@ -208,6 +209,8 @@ test("repay v2 uses the owner's debt account and deposit reserves", () => {
   assert.ok(instruction.keys[6].pubkey.equals(associatedTokenAddress(debtMint, OWNER)));
   assert.ok(instruction.keys[13].pubkey.equals(collateralReserve));
   assert.ok(instruction.keys[13].isWritable);
+  const data = Uint8Array.from(instruction.data);
+  assert.equal(new DataView(data.buffer, data.byteOffset, data.byteLength).getBigUint64(8, true), U64_MAX);
   assert.equal(instruction.keys.filter((key) => key.isSigner).length, 1);
   assert.ok(instruction.keys[0].pubkey.equals(OWNER));
 });

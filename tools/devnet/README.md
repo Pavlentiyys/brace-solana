@@ -34,6 +34,7 @@ npm run market                      # mints, market, two reserves, config
 npx tsx src/seed.ts                 # first price refresh, funds the debt reserve
 npx tsx src/patch-borrow-limit.ts   # opens the debt side to ordinary obligations
 npx tsx src/open-position.ts 2 100  # faucet, obligation, deposit 2 bSOL, borrow 100 bUSDC
+npx tsx src/mint-to.ts <address> 1 debt # top up test bUSDC for accrued borrow interest
 npx tsx src/refresh.ts <obligation> # recompute the aggregates so the app reads them
 ```
 
@@ -41,6 +42,10 @@ Everything signs with `~/.config/solana/id.json`; point `BRACE_KEYPAIR` elsewher
 use another key. **The position belongs to whichever key signs**, because KLend
 requires the obligation owner's signature on every step — so to see it in the web
 app, connect that same key in Phantom.
+
+The `mint-to` command is the local devnet faucet. A borrow accrues interest, so the
+wallet may need a small bUSDC top-up before the test position can be closed. It uses
+the project mint authority locally; that key is never sent to the browser or Vercel.
 
 `market.json` holds every address the scripts created and is what the app reads.
 

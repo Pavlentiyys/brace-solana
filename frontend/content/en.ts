@@ -240,6 +240,7 @@ export const en = {
         "Ask about the position in your own words. Actions open the guarded panels; broader questions go to the assistant.",
       placeholder: "How close am I to liquidation?",
       inputLabel: "Ask the agent",
+      account: "Account",
       send: "Send",
       newChat: "New chat",
       deleteChat: "Delete chat",
@@ -267,7 +268,7 @@ export const en = {
       signatures:
         "Three signatures: deposit, borrow, and a refresh so the numbers are current.",
       closeNote:
-        "Two devnet transactions repay the test debt and return the collateral. There is no paid business operation. Solana network fees still need a small amount of devnet SOL; closing the obligation returns its account rent.",
+        "Two devnet transactions repay the test debt and return the collateral. There is no paid business operation. If interest has accrued, top up the small bUSDC difference from the local devnet faucet first. Solana network fees still need a small amount of devnet SOL; closing the obligation returns its account rent.",
       needsWallet: "Connect a wallet first.",
       demoWallet:
         "The demo wallet cannot sign. Connect Phantom to open a position on the cluster.",
@@ -353,6 +354,23 @@ export const en = {
           "The request was sent but confirmation is taking longer than expected. Check it again before requesting more SOL.",
         unknown: "The faucet request failed unexpectedly.",
       },
+      usdcLink: "Need test bUSDC for a Kamino position? Open the bUSDC faucet.",
+    },
+    usdcFaucet: {
+      heading: "Devnet bUSDC faucet",
+      lead:
+        "Request test bUSDC for the Brace Kamino market. It is minted to the connected wallet and never asks that wallet to sign.",
+      cardTitle: "Request test bUSDC",
+      amountNote: "One request sends 1 bUSDC to your connected wallet. This token has no monetary value and exists only on devnet.",
+      request: "Request 1 bUSDC",
+      requesting: "Requesting",
+      needsWallet: "Connect a wallet first.",
+      connected: "The connected wallet will receive the tokens.",
+      idle: "No request has been sent from this page yet.",
+      requestingStatus: "The faucet is simulating and sending the mint transaction.",
+      success: "1 bUSDC was sent to your wallet.",
+      signature: "Transaction",
+      errors: { unknown: "The bUSDC faucet request failed unexpectedly." },
     },
     discovery: {
       heading: "Your borrows",
