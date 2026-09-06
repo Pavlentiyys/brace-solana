@@ -21,6 +21,7 @@ import { usePlatform } from "@/lib/platform/provider";
 
 const LINKS = [
   { href: "/chat", label: en.app.nav.panel },
+  { href: "/chat/analytics", label: en.app.nav.analytics },
   { href: "/chat/history", label: en.app.nav.history },
 ] as const;
 

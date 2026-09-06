@@ -18,6 +18,7 @@ export const en = {
   nav: {
     docs: "Docs",
     app: "Chat",
+    analytics: "Analytics",
     connect: "Connect wallet",
     skipToContent: "Skip to content",
     openMenu: "Open menu",
@@ -212,6 +213,7 @@ export const en = {
   app: {
     nav: {
       panel: "Position",
+      analytics: "Analytics",
       history: "History",
       authorize: "Authorization",
     },
