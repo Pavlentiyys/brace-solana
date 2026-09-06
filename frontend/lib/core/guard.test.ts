@@ -30,6 +30,7 @@ function guard(overrides: Partial<Guard> = {}): Guard {
     policy: defaultPolicy(NOW),
     paused: false,
     lastActionAt: 0,
+    lastScheduledAt: NOW,
     windowStartedAt: NOW,
     actionsInWindow: 0,
     totalActions: 0,

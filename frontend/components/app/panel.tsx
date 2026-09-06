@@ -19,6 +19,7 @@ import {
 import { agoLabel, durationLabel, priceIsStale, watcherLiveness } from "@/lib/core/liveness";
 import { positionLtvBps } from "@/lib/core/position";
 import { firingsLeft, minimumForOneAction } from "@/lib/core/reserve";
+import { nextScheduledAt } from "@/lib/core/policy";
 import { formatAmount, QUOTE_DECIMALS, QUOTE_SYMBOL } from "@/lib/core/units";
 import { useGuardAction, useSelectedPosition } from "@/lib/platform/provider";
 import type { Outcome } from "@/lib/platform/types";
@@ -146,7 +147,7 @@ function ReserveCard({
         measured at your {percentFromBps(guard.policy.triggerLtvBps)} trigger.
       </Note>
       <Link
-        href="/app/reserve"
+        href="/chat/reserve"
         className="mt-4 inline-block text-[13px] text-accent underline-offset-4 hover:underline"
       >
         {copy.reserve.manage}
@@ -160,6 +161,7 @@ function AuthorityCard({ guard, now }: { guard: Guard; now: number }) {
   const usage = windowUsage(guard, now);
   const cooldown = cooldownRemaining(guard, now);
   const left = secondsUntilExpiry(guard, now);
+  const schedule = nextScheduledAt(guard);
 
   return (
     <Card>
@@ -193,6 +195,15 @@ function AuthorityCard({ guard, now }: { guard: Guard; now: number }) {
           label={copy.authority.cooldown}
           value={cooldown > 0 ? durationLabel(cooldown) : copy.authority.ready}
         />
+        {/* Only when there is one. A row reading "no schedule" on every panel would
+            be four words of chrome describing the absence of a feature. */}
+        {schedule !== null ? (
+          <Row
+            label={copy.authority.nextPayment}
+            value={`${formatAmount(guard.policy.scheduleAmount, QUOTE_DECIMALS)} ${QUOTE_SYMBOL}`}
+            hint={`${copy.authority.everyLabel} ${durationLabel(guard.policy.scheduleSeconds)}, ${copy.authority.nextIn} ${durationLabel(Math.max(0, schedule - now))}`}
+          />
+        ) : null}
         <Row label="Actions taken" value={guard.totalActions} />
         <Row
           label="Total repaid"
@@ -307,7 +318,7 @@ export function Panel() {
             {copy.noGuardBody}
           </p>
           <Link
-            href="/app/authorize"
+            href="/chat/authorize"
             className="mt-5 inline-flex min-h-11 items-center rounded-panel bg-accent px-5 text-[14px] font-medium text-canvas transition-colors duration-300 hover:bg-accent-deep"
           >
             {en.app.discovery.authorize}

@@ -295,7 +295,16 @@ function asFailure(error: unknown): Failure {
   const kind = (error as { failureKind?: string }).failureKind;
   if (kind === "rpc_unavailable") return { kind: "rpc_unavailable" };
 
-  return { kind: "unknown", detail: (error as Error).message ?? String(error) };
+  const message = (error as Error).message ?? String(error);
+  if (/wallet.*(locked|unlock)|please unlock/i.test(message)) return { kind: "wallet_locked" };
+  if (/already processing|request is already pending|device is busy/i.test(message)) {
+    return { kind: "wallet_busy" };
+  }
+  if (/wallet.*(disconnect|disconnected)|walletNotConnected/i.test(message)) {
+    return { kind: "wallet_disconnected" };
+  }
+
+  return { kind: "unknown", detail: message };
 }
 
 /**
@@ -316,6 +325,13 @@ export function useGuardAction(action: (source: GuardSource) => Promise<Outcome>
         return { ok: false, failure: asFailure(error) };
       }
     },
-    onSettled: () => client.invalidateQueries({ queryKey: [SNAPSHOT_KEY] }),
+    // Invalidate first so cached data is marked stale, then wait for the active
+    // snapshot to be fetched before releasing the pending state. Without the
+    // explicit refetch, the panel could keep showing the pre-transaction values
+    // until the next interval or a full page reload.
+    onSettled: async () => {
+      await client.invalidateQueries({ queryKey: [SNAPSHOT_KEY] });
+      await client.refetchQueries({ queryKey: [SNAPSHOT_KEY], type: "active" });
+    },
   });
 }

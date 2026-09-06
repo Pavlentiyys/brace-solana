@@ -20,6 +20,8 @@ pub const FARMS_PROGRAM_ID: Pubkey =
     Pubkey::from_str_const("FarmsPZpWu9i7Kky8tPN37rs2TpmMrAZrC7S7vJa91Hr");
 pub const SPL_TOKEN_ID: Pubkey =
     Pubkey::from_str_const("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+pub const SYSTEM_PROGRAM_ID: Pubkey =
+    Pubkey::from_str_const("11111111111111111111111111111111");
 pub const INSTRUCTIONS_SYSVAR_ID: Pubkey =
     Pubkey::from_str_const("Sysvar1nstructions1111111111111111111111111");
 
@@ -29,12 +31,15 @@ pub const LENDING_MARKET_AUTH_SEED: &[u8] = b"lma";
 
 pub const ACTION_REPAY: u8 = 1 << 0;
 pub const ACTION_TOP_UP: u8 = 1 << 1;
+pub const ACTION_SCHEDULED_REPAY: u8 = 1 << 2;
 
 /// Anchor instruction discriminators, copied from `idl/guard.json`.
 pub mod ix {
     pub const EXECUTE_ACTION: [u8; 8] = [246, 137, 105, 113, 247, 6, 223, 174];
     pub const WITHDRAW_RESERVE: [u8; 8] = [165, 158, 228, 5, 114, 119, 194, 14];
     pub const REVOKE: [u8; 8] = [170, 23, 31, 34, 133, 173, 93, 242];
+    pub const OWNER_REPAY: [u8; 8] = [205, 18, 148, 210, 27, 12, 229, 49];
+    pub const MIGRATE_GUARD: [u8; 8] = [175, 134, 32, 40, 68, 232, 134, 180];
 }
 
 /// `GuardError` variants as Anchor emits them: custom codes start at 6000 and follow
@@ -62,4 +67,7 @@ pub mod err {
     pub const INVALID_AMOUNT: u32 = 6019;
     pub const CLOCK_MOVED_BACKWARDS: u32 = 6020;
     pub const POST_CPI_INVARIANT: u32 = 6021;
+    pub const SCHEDULE_NOT_DUE: u32 = 6022;
+    pub const SCHEDULE_NOT_CONFIGURED: u32 = 6023;
+    pub const UNAUTHORIZED_OWNER: u32 = 6024;
 }

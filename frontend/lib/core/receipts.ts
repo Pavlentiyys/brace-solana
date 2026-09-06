@@ -22,6 +22,8 @@ export type ReceiptKind =
   | "reserve_deposited"
   | "reserve_withdrawn"
   | "action_executed"
+  | "scheduled_repay"
+  | "owner_repay"
   | "action_failed"
   | "paused"
   | "resumed"
@@ -75,6 +77,13 @@ export function describeReceipt(receipt: Receipt): string {
       return `Withdrew ${amountText(receipt.amount)} from the reserve.`;
     case "action_executed":
       return `Repaid ${amountText(receipt.amount)}.${ltvText(receipt)}`;
+    // Named apart from the line above on purpose. "The agent repaid because your
+    // position was in danger" and "the agent made the payment you scheduled" are the
+    // same transaction and completely different news.
+    case "scheduled_repay":
+      return `Scheduled payment: repaid ${amountText(receipt.amount)}.${ltvText(receipt)}`;
+    case "owner_repay":
+      return `You repaid ${amountText(receipt.amount)}.${ltvText(receipt)}`;
     case "action_failed":
       return `Tried to repay ${amountText(receipt.amount)} and the transaction did not go through.`;
     case "paused":
@@ -95,11 +104,20 @@ export function sortByNewest(receipts: readonly Receipt[]): Receipt[] {
   return [...receipts].sort((a, b) => b.at - a.at);
 }
 
-/** Total repaid across the executed actions in a list, in base units. */
+/** Every kind that actually moved money from the reserve to the debt. */
+const REPAY_KINDS = new Set<ReceiptKind>(["action_executed", "scheduled_repay", "owner_repay"]);
+
+/**
+ * Total repaid across a list, in base units.
+ *
+ * Counts all three ways a repay happens. The number this feeds answers "how much of
+ * this debt has the reserve paid off", and for that question it does not matter
+ * which signature moved it.
+ */
 export function totalRepaid(receipts: readonly Receipt[]): bigint {
   return receipts.reduce(
     (sum, receipt) =>
-      receipt.kind === "action_executed" && receipt.amount !== undefined ? sum + receipt.amount : sum,
+      REPAY_KINDS.has(receipt.kind) && receipt.amount !== undefined ? sum + receipt.amount : sum,
     0n,
   );
 }

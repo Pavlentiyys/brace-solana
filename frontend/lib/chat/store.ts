@@ -108,19 +108,33 @@ export function startThread(): void {
   commit({ threads, activeId: thread.id });
 }
 
-/** Removes a thread, keeping at least one so the composer always has a home. */
-export function deleteThread(id: string): void {
+/**
+ * Removes a thread, keeping at least one so the composer always has a home.
+ *
+ * Returns a function that puts it back. Deleting used to be one click on a
+ * small glyph with nothing behind it, which meant a missed click destroyed a
+ * conversation the browser was the only copy of.
+ */
+export function deleteThread(id: string): () => void {
   const current = ensure();
+  const removed = current.threads.find((thread) => thread.id === id);
   const remaining = current.threads.filter((thread) => thread.id !== id);
 
   if (remaining.length === 0) {
     commit(fresh());
-    return;
+  } else {
+    const activeId =
+      current.activeId === id ? sortThreads(remaining)[0].id : current.activeId;
+    commit({ threads: remaining, activeId });
   }
 
-  const activeId =
-    current.activeId === id ? sortThreads(remaining)[0].id : current.activeId;
-  commit({ threads: remaining, activeId });
+  return () => {
+    if (!removed) return;
+    const now = ensure();
+    // Restoring a thread that is somehow back already would duplicate it.
+    if (now.threads.some((thread) => thread.id === removed.id)) return;
+    commit({ threads: [...now.threads, removed], activeId: removed.id });
+  };
 }
 
 export function setMessages(id: string, messages: ChatMessage[]): void {

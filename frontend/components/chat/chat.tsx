@@ -7,7 +7,9 @@ import { ConnectGate, PositionList } from "@/components/app/connect";
 import { FailureNotice } from "@/components/app/failure-notice";
 import { HistoryScreen } from "@/components/app/history-screen";
 import { Panel } from "@/components/app/panel";
+import { RepayNow } from "@/components/app/repay-now";
 import { ReserveScreen } from "@/components/app/reserve-screen";
+import { ScheduleScreen } from "@/components/app/schedule-screen";
 import { OpenPosition } from "@/components/app/open-position";
 import { ActionProposal } from "@/components/chat/action-proposal";
 import { ThreadList } from "@/components/chat/thread-list";
@@ -33,7 +35,7 @@ import {
   startThread,
   subscribe,
 } from "@/lib/chat/store";
-import type { ProposedAction } from "@/lib/chat/actions";
+import type { ProposedAction, RepayNowAction } from "@/lib/chat/actions";
 import { newId, type Thread } from "@/lib/chat/threads";
 import { positionLtvBps } from "@/lib/core/position";
 import { usePlatform, useSelectedPosition } from "@/lib/platform/provider";
@@ -93,14 +95,20 @@ function useChatContext(): ChatContext {
   }, [status, world, wallet.kind, config.clusterLabel, snapshot, entry, failure, isLoading, source]);
 }
 
-function Block({ block }: { block: ChatBlock }) {
+function Block({
+  block,
+  onOpenPosition,
+}: {
+  block: ChatBlock;
+  onOpenPosition: (obligation: string) => void;
+}) {
   switch (block.kind) {
     case "text":
       return <p className="text-[13px] leading-relaxed text-ink">{block.text}</p>;
     case "connect":
       return <ConnectGate>{null}</ConnectGate>;
     case "positions":
-      return <PositionList />;
+      return <PositionList onOpen={onOpenPosition} />;
     case "openPosition":
       return <OpenPosition />;
     case "proposal":
@@ -109,6 +117,10 @@ function Block({ block }: { block: ChatBlock }) {
       return <Panel />;
     case "reserve":
       return <ReserveScreen />;
+    case "repayNow":
+      return <RepayNow />;
+    case "schedule":
+      return <ScheduleScreen />;
     case "authorize":
       return <AuthorizeScreen />;
     case "history":
@@ -157,15 +169,17 @@ function Conversation({
   arriving,
   pending,
   onSend,
+  onOpenPosition,
 }: {
   thread: Thread;
   context: ChatContext;
   arriving: ReadonlySet<string>;
   pending: boolean;
   onSend: (input: string, opening: ChatMessage) => void;
+  onOpenPosition: (obligation: string, opening: ChatMessage) => void;
 }) {
   const [draft, setDraft] = useState("");
-  const endRef = useRef<HTMLDivElement>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
 
   const opening: ChatMessage = useMemo(
     () => ({ id: `${thread.id}-opening`, role: "bot", at: thread.createdAt, ...greeting(context) }),
@@ -177,8 +191,28 @@ function Conversation({
     [thread.messages, opening],
   );
 
+  /**
+   * Keep the newest message in view while it is still growing.
+   *
+   * Scrolling once when the message count changes was not enough: an answer
+   * carrying a rich block renders its text first and the block a frame later,
+   * so the scroll landed above content that had not been laid out yet and the
+   * answer stayed under the fold. Watching the content's size instead follows
+   * it until it settles.
+   */
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    const scroller = scrollerRef.current;
+    const content = scroller?.firstElementChild;
+    if (!scroller || !content) return;
+
+    const pin = () => {
+      scroller.scrollTop = scroller.scrollHeight;
+    };
+
+    pin();
+    const observer = new ResizeObserver(pin);
+    observer.observe(content);
+    return () => observer.disconnect();
   }, [messages.length, pending, thread.id]);
 
   function submit(input: string) {
@@ -194,18 +228,27 @@ function Conversation({
       : available(context).slice(0, 4);
 
   return (
-    <div className="flex min-h-[60vh] flex-col gap-6">
-      <div className="flex flex-1 flex-col gap-6">
-        {messages.map((message) => (
-          <Bubble
-            key={message.id}
-            message={message}
-            animate={arriving.has(message.id)}
-            renderBlock={(block) => <Block block={block} />}
-          />
-        ))}
-        {pending ? <Thinking /> : null}
-        <div ref={endRef} />
+    // The messages scroll, the composer does not. It used to be `sticky
+    // bottom-0` inside a page that scrolled as a whole, which pinned it over
+    // the last answer whenever the conversation was shorter than the viewport.
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div ref={scrollerRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <div className="flex flex-col gap-6 pb-6">
+          {messages.map((message) => (
+            <Bubble
+              key={message.id}
+              message={message}
+              animate={arriving.has(message.id)}
+              renderBlock={(block) => (
+                <Block
+                  block={block}
+                  onOpenPosition={(obligation) => onOpenPosition(obligation, opening)}
+                />
+              )}
+            />
+          ))}
+          {pending ? <Thinking /> : null}
+        </div>
       </div>
 
       {/*
@@ -215,13 +258,8 @@ function Conversation({
         so messages dissolve rather than being cut, an opaque strip under it, and
         the controls on `surface` a step above the canvas behind them.
       */}
-      <div className="sticky bottom-0 flex flex-col">
-        <div
-          aria-hidden
-          className="pointer-events-none h-8 bg-gradient-to-b from-transparent to-canvas"
-        />
-
-        <div className="bg-canvas pb-4">
+      <div className="flex shrink-0 flex-col border-t border-line">
+        <div className="bg-canvas pt-4">
           <div className="flex flex-col gap-3 rounded-panel border border-line-strong bg-surface p-4 shadow-[0_2px_28px_rgba(0,0,0,0.55)]">
             <Chips names={chips} onPick={(name) => submit(`/${name}`)} />
 
@@ -258,8 +296,30 @@ function Conversation({
 
 export function Chat() {
   const context = useChatContext();
+  const { select } = usePlatform();
   const state = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   const thread = activeThread(state);
+
+  /**
+   * Undo rather than a confirmation dialog.
+   *
+   * A dialog stops the user on every delete, including the deliberate ones,
+   * and most deletes are deliberate. An undo costs nothing when the click was
+   * meant and recovers the conversation when it was not. The browser is the
+   * only copy, so recovery has to exist somewhere.
+   */
+  const [undo, setUndo] = useState<(() => void) | null>(null);
+
+  useEffect(() => {
+    if (!undo) return;
+    const timer = window.setTimeout(() => setUndo(null), 6000);
+    return () => window.clearTimeout(timer);
+  }, [undo]);
+
+  function remove(id: string) {
+    const restore = deleteThread(id);
+    setUndo(() => restore);
+  }
 
   /**
    * Which messages should play an arrival.
@@ -289,6 +349,31 @@ export function Chat() {
       for (const message of messages) next.add(message.id);
       return next;
     });
+  }
+
+  /**
+   * Point the panel at one borrow and answer with it.
+   *
+   * The list of borrows arrives as a block inside an answer, so "open" cannot
+   * mean "navigate": the reader is already on the only page there is. It means
+   * the same thing the rest of this surface means by an answer, which is a new
+   * message carrying the panel for the position that was picked.
+   */
+  function openPosition(obligation: string, opening: ChatMessage) {
+    select(obligation);
+
+    const id = thread!.id;
+    const history = thread!.messages.length === 0 ? [opening] : thread!.messages;
+    const botMessage: ChatMessage = {
+      id: newId(),
+      role: "bot",
+      at: Date.now(),
+      blocks: [{ kind: "status" }],
+      suggestions: available(context).slice(0, 4),
+    };
+
+    remember([botMessage]);
+    setMessages(id, [...history, botMessage]);
   }
 
   async function send(input: string, opening: ChatMessage) {
@@ -365,7 +450,7 @@ export function Chat() {
       });
       const payload = (await response.json()) as {
         text?: string;
-        action?: ProposedAction | null;
+        action?: ProposedAction | RepayNowAction | null;
         error?: string;
       };
       if (!response.ok || (!payload.text && !payload.action)) {
@@ -376,7 +461,14 @@ export function Chat() {
       // exactly what would be signed, and the wallet is the only thing that acts.
       const blocks: ChatMessage["blocks"] = [];
       if (payload.text) blocks.push({ kind: "text", text: payload.text });
-      if (payload.action) blocks.push({ kind: "proposal", action: payload.action });
+      if (payload.action?.kind === "repay_now") {
+        // An immediate repayment has no amount in the user's request. Open the
+        // owner-signed screen so the current reserve, debt and LTV are read from
+        // the selected source and the owner chooses the amount explicitly.
+        blocks.push({ kind: "repayNow" });
+      } else if (payload.action) {
+        blocks.push({ kind: "proposal", action: payload.action });
+      }
 
       appendBot(blocks, available(context).slice(0, 4));
     } catch (error) {
@@ -400,19 +492,43 @@ export function Chat() {
   }
 
   return (
-    <div className="flex flex-col gap-6 md:flex-row md:gap-8">
-      <aside className="md:w-[220px] md:shrink-0">
+    <div className="flex min-h-0 flex-1 flex-col gap-6 md:flex-row md:gap-8">
+      <aside className="md:w-[220px] md:shrink-0 md:overflow-y-auto">
         <ThreadList
           threads={state.threads}
           activeId={state.activeId}
           now={now}
           onSelect={selectThread}
           onCreate={startThread}
-          onDelete={deleteThread}
+          onDelete={remove}
         />
       </aside>
 
-      <div className="min-w-0 flex-1">
+      {undo ? (
+        // Fixed to the viewport, not to the composer. The composer grows and
+        // shrinks with its suggestion chips, so anything anchored above it
+        // lands inside it at some heights, which is where this first sat.
+        <div
+          role="status"
+          className="pointer-events-none fixed inset-x-0 bottom-8 z-40 flex justify-center px-5"
+        >
+          <div className="pointer-events-auto flex items-center gap-4 rounded-panel border border-line bg-raised px-4 py-2.5 shadow-2xl">
+            <span className="text-[13px] text-ink-dim">{en.app.chat.deleted}</span>
+            <button
+              type="button"
+              onClick={() => {
+                undo();
+                setUndo(null);
+              }}
+              className="text-[13px] text-accent underline-offset-4 transition-colors duration-300 hover:underline"
+            >
+              {en.app.chat.undo}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <Conversation
           key={thread.id}
           thread={thread}
@@ -420,6 +536,7 @@ export function Chat() {
           arriving={arriving}
           pending={pending}
           onSend={send}
+          onOpenPosition={openPosition}
         />
       </div>
     </div>

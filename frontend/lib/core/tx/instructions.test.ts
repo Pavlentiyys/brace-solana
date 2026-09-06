@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { defaultPolicy } from "../policy";
-import { DISCRIMINATORS } from "../program";
+import { ALLOWED_ACTIONS_SCHEDULED, DISCRIMINATORS } from "../program";
 import { decodeBase58, decodePublicKey, encodeBase58, isValidPublicKey, shortenAddress } from "./base58";
 import {
   depositReserveData,
@@ -71,9 +71,10 @@ test("the withdraw-everything sentinel is u64::MAX", () => {
 });
 
 test("InitGuardArgs is a pubkey followed by the policy struct", () => {
-  // 8 discriminator + 32 agent + PolicyParams (2 + 2 + 8 + 1 + 4 + 4 + 1 + 8).
+  // 8 discriminator + 32 agent + PolicyParams
+  // (2 + 2 + 8 + 1 + 4 + 4 + 1 + 4 + 8 + 8), the last two being the schedule.
   const data = initGuardData(TOKEN_PROGRAM, defaultPolicy(NOW));
-  assert.equal(data.length, 8 + 32 + 30);
+  assert.equal(data.length, 8 + 32 + 42);
   assert.deepEqual([...data.slice(8, 40)], [...decodePublicKey(TOKEN_PROGRAM)]);
 });
 
@@ -86,6 +87,9 @@ test("policy fields are written in the order the struct declares them", () => {
     maxActionsPerWindow: 3,
     windowSeconds: 0x0102_0304,
     cooldownSeconds: 60,
+    allowedActions: ALLOWED_ACTIONS_SCHEDULED,
+    scheduleSeconds: 0x0a0b_0c0d,
+    scheduleAmount: 0xeen,
     expiresAt: 1,
   };
   const body = initGuardData(TOKEN_PROGRAM, policy).slice(40);
@@ -97,7 +101,9 @@ test("policy fields are written in the order the struct declares them", () => {
   assert.deepEqual([...body.slice(13, 17)], [0x04, 0x03, 0x02, 0x01]);
   assert.deepEqual([...body.slice(17, 21)], [60, 0, 0, 0]);
   assert.equal(body[21], policy.allowedActions);
-  assert.deepEqual([...body.slice(22, 30)], [1, 0, 0, 0, 0, 0, 0, 0]);
+  assert.deepEqual([...body.slice(22, 26)], [0x0d, 0x0c, 0x0b, 0x0a]);
+  assert.deepEqual([...body.slice(26, 34)], [0xee, 0, 0, 0, 0, 0, 0, 0]);
+  assert.deepEqual([...body.slice(34, 42)], [1, 0, 0, 0, 0, 0, 0, 0]);
 });
 
 test("update_policy appends the paused flag after the policy", () => {
@@ -105,7 +111,7 @@ test("update_policy appends the paused flag after the policy", () => {
   const paused = updatePolicyData(TOKEN_PROGRAM, policy, true);
   const running = updatePolicyData(TOKEN_PROGRAM, policy, false);
 
-  assert.equal(paused.length, 8 + 32 + 30 + 1);
+  assert.equal(paused.length, 8 + 32 + 42 + 1);
   assert.equal(paused.at(-1), 1);
   assert.equal(running.at(-1), 0);
 });

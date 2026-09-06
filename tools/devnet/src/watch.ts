@@ -42,6 +42,7 @@ const KLEND_PROGRAM_ID = new PublicKey("KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavg
 const FARMS_PROGRAM_ID = new PublicKey("FarmsPZpWu9i7Kky8tPN37rs2TpmMrAZrC7S7vJa91Hr");
 const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 const ACTION_REPAY = 1;
+const ACTION_SCHEDULED_REPAY = 1 << 2;
 
 interface Market {
   lendingMarket: string;
@@ -73,13 +74,22 @@ function pda(seed: string, program: PublicKey, ...rest: PublicKey[]): PublicKey 
 }
 
 // --- Guard account layout, mirroring `decode.ts` and `state.rs` ----------------
+//
+// Everything from `expires_at` onwards shifted by 12 when the schedule fields
+// landed between `allowed_actions` and it, and `last_scheduled_at` added 8 more
+// after `actions_in_window`. Offsets past that point are the reason this file is
+// listed beside `decode.ts` whenever the account changes: a wrong one here does not
+// fail, it reads a plausible number from the wrong bytes.
 const G = { owner: 8, agent: 40, obligation: 72, lendingMarket: 104, debtReserve: 136, vault: 168, vaultMint: 200 };
 const G_TRIGGER = 232;
 const G_TARGET = 234;
 const G_MAX_ACTION = 236;
 const G_ALLOWED = 253;
-const G_EXPIRES = 254;
-const G_PAUSED = 262;
+const G_SCHEDULE_SECONDS = 254;
+const G_SCHEDULE_AMOUNT = 258;
+const G_EXPIRES = 266;
+const G_PAUSED = 274;
+const G_LAST_SCHEDULED = 292;
 
 // --- Obligation offsets, mirroring `adapter/kamino.rs` -------------------------
 const O_STALE = 24;
@@ -142,11 +152,12 @@ function executeActionIx(input: {
   vaultMint: PublicKey;
   reserveLiquiditySupply: PublicKey;
   deposits: PublicKey[];
+  actionKind: number;
   amount: bigint;
 }): TransactionInstruction {
   const data = Buffer.alloc(17);
   Buffer.from(EXECUTE_ACTION).copy(data, 0);
-  data.writeUInt8(ACTION_REPAY, 8);
+  data.writeUInt8(input.actionKind, 8);
   data.writeBigUInt64LE(input.amount, 9);
 
   return {
@@ -244,29 +255,56 @@ async function tick(): Promise<void> {
     const debt = u128(fresh, O_DEBT_VALUE);
     const ltv = ltvBps(collateral, debt);
 
-    if (ltv < trigger) {
-      console.log(`${label} LTV ${(ltv / 100).toFixed(2)}% is below the ${(trigger / 100).toFixed(2)}% trigger`);
-      continue;
-    }
+    const scheduleSeconds = data.readUInt32LE(G_SCHEDULE_SECONDS);
+    const scheduleAmount = data.readBigUInt64LE(G_SCHEDULE_AMOUNT);
+    const lastScheduledAt = data.readBigInt64LE(G_LAST_SCHEDULED);
+    const scheduleDue =
+      (allowed & ACTION_SCHEDULED_REPAY) !== 0 &&
+      scheduleSeconds > 0 &&
+      now - lastScheduledAt >= BigInt(scheduleSeconds);
 
-    // How much value has to go to reach the target, converted to an amount through
-    // the vault's own balance. The program checks the same thing and reverts if this
-    // overshoots, so being approximate here is safe rather than load bearing.
-    const wanted = debt - (collateral * BigInt(target)) / 10_000n;
-    const scale = 10n ** BigInt(market.debt.decimals);
-    const wantedTokens = (wanted * scale) >> 60n;
     const vault = key(data, G.vault);
     const vaultBalance = BigInt((await connection.getTokenAccountBalance(vault)).value.amount);
-    const amount = [wantedTokens, maxAction, vaultBalance].reduce((a, b) => (a < b ? a : b));
+    const ltvText = `${(ltv / 100).toFixed(2)}%`;
 
-    if (amount === 0n) {
-      console.log(`${label} LTV ${(ltv / 100).toFixed(2)}% is over the trigger but the reserve is empty`);
+    let actionKind: number;
+    let amount: bigint;
+
+    if (ltv >= trigger) {
+      // The emergency comes first when both apply. A scheduled payment that is due
+      // stays due, and runs on the next tick; a position over its trigger does not
+      // wait for anything.
+      //
+      // How much value has to go to reach the target, converted to an amount through
+      // the vault's own balance. The program checks the same thing and reverts if
+      // this overshoots, so being approximate here is safe rather than load bearing.
+      const wanted = debt - (collateral * BigInt(target)) / 10_000n;
+      const scale = 10n ** BigInt(market.debt.decimals);
+      const wantedTokens = (wanted * scale) >> 60n;
+      actionKind = ACTION_REPAY;
+      amount = [wantedTokens, maxAction, vaultBalance].reduce((a, b) => (a < b ? a : b));
+      console.log(
+        `${label} LTV ${ltvText} >= ${(trigger / 100).toFixed(2)}%, repaying ${amount} ${market.debt.label}`,
+      );
+    } else if (scheduleDue) {
+      // No target arithmetic here on purpose. A scheduled payment is a payment, not
+      // a correction, so the amount is the one the owner set and the only thing that
+      // can shrink it is an underfunded reserve.
+      actionKind = ACTION_SCHEDULED_REPAY;
+      amount = scheduleAmount < vaultBalance ? scheduleAmount : vaultBalance;
+      console.log(
+        `${label} scheduled payment due, repaying ${amount} ${market.debt.label} at LTV ${ltvText}`,
+      );
+    } else {
+      const next = scheduleSeconds > 0 ? `, next payment in ${lastScheduledAt + BigInt(scheduleSeconds) - now}s` : "";
+      console.log(`${label} LTV ${ltvText} is below the ${(trigger / 100).toFixed(2)}% trigger${next}`);
       continue;
     }
 
-    console.log(
-      `${label} LTV ${(ltv / 100).toFixed(2)}% >= ${(trigger / 100).toFixed(2)}%, repaying ${amount} ${market.debt.label}`,
-    );
+    if (amount === 0n) {
+      console.log(`${label} there is something to do but the reserve is empty`);
+      continue;
+    }
 
     const action = new Transaction();
     for (const reserve of reserves) {
@@ -284,6 +322,7 @@ async function tick(): Promise<void> {
         vaultMint: key(data, G.vaultMint),
         reserveLiquiditySupply: pda("reserve_liq_supply", KLEND_PROGRAM_ID, key(data, G.debtReserve)),
         deposits,
+        actionKind,
         amount,
       }),
     );

@@ -37,10 +37,29 @@ export const ACCOUNT_ORDER = {
   withdraw_reserve: ["guard", "owner", "vault", "owner_destination", "vault_mint", "token_program"],
   update_policy: ["guard", "owner", "obligation"],
   revoke: ["guard", "owner"],
+  migrate_guard: ["guard", "owner", "system_program"],
   execute_action: [
     "guard",
     "vault",
     "agent",
+    "obligation",
+    "lending_market",
+    "debt_reserve",
+    "vault_mint",
+    "reserve_liquidity_supply",
+    "lending_market_authority",
+    "lending_program",
+    "farms_program",
+    "token_program",
+    "instruction_sysvar",
+  ],
+  // Identical to `execute_action` with the owner in the signer slot. That single
+  // substitution is the whole difference between the delegated path and the one the
+  // owner drives, and keeping the lists side by side is what makes it readable.
+  owner_repay: [
+    "guard",
+    "vault",
+    "owner",
     "obligation",
     "lending_market",
     "debt_reserve",
@@ -121,6 +140,8 @@ function writePolicy(target: Writer, policy: Policy): Writer {
     .u32(policy.windowSeconds)
     .u32(policy.cooldownSeconds)
     .u8(policy.allowedActions)
+    .u32(policy.scheduleSeconds)
+    .u64(policy.scheduleAmount)
     .i64(BigInt(policy.expiresAt));
 }
 
@@ -155,4 +176,23 @@ export function revokeData(): Uint8Array {
 
 export function executeActionData(actionKind: number, amount: bigint): Uint8Array {
   return writer("execute_action").u8(actionKind).u64(amount).finish();
+}
+
+/**
+ * `u64::MAX` again, and for the same reason: the program resolves it against the
+ * live vault balance, so "repay everything" cannot be raced by a deposit or an
+ * action landing between the read and the signature.
+ *
+ * It means the whole reserve rather than the whole debt. Kamino settles a repay at
+ * whatever is outstanding, so an over-funded reserve clears the debt and keeps the
+ * difference.
+ */
+export const REPAY_ALL = WITHDRAW_ALL;
+
+export function migrateGuardData(): Uint8Array {
+  return writer("migrate_guard").finish();
+}
+
+export function ownerRepayData(amount: bigint): Uint8Array {
+  return writer("owner_repay").u64(amount).finish();
 }

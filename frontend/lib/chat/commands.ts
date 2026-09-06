@@ -18,6 +18,8 @@ export type CommandName =
   | "status"
   | "reserve"
   | "authorize"
+  | "repay"
+  | "schedule"
   | "history"
   | "pause"
   | "resume"
@@ -104,6 +106,24 @@ export const COMMANDS: CommandSpec[] = [
     needsGuard: false,
   },
   {
+    name: "repay",
+    label: "Repay now",
+    summary: "Send part of your reserve, or all of it, at the debt right now.",
+    // "now" is deliberately absent: it belongs to "how is my position now", which is
+    // the question this surface must never misroute.
+    keywords: ["repay", "pay", "payoff", "settle", "clear", "reduce"],
+    needsWallet: true,
+    needsGuard: true,
+  },
+  {
+    name: "schedule",
+    label: "Repay on a schedule",
+    summary: "Repay a fixed amount every week, or on whatever interval you set.",
+    keywords: ["schedule", "scheduled", "recurring", "weekly", "monthly", "daily", "regularly", "every", "automatic"],
+    needsWallet: true,
+    needsGuard: true,
+  },
+  {
     name: "history",
     label: "History",
     summary: "Every action the agent has taken.",
@@ -160,6 +180,17 @@ export function matchCommand(input: string): CommandSpec | null {
   if (text.startsWith("/")) {
     const name = text.slice(1).split(/\s+/)[0];
     return COMMANDS.find((command) => command.name === name) ?? null;
+  }
+
+  // An immediate repayment is a one-off owner action, not a request to inspect
+  // status or create a rule. Handle the common English and Russian phrasing before
+  // keyword scoring, where `ltv`, `now` and `current` could otherwise make status
+  // win over the repayment verb.
+  if (
+    /(?:\b(repay|payoff|settle|clear)\b|погаси(?:ть|у)?|погашение)[\s\S]*(?:\b(now|current|immediate)\b|сейчас|текущ(?:ий|ая|ем|ей))/i.test(text) ||
+    /(?:\b(now)\b|сейчас)[\s\S]*(?:\b(repay|payoff|settle|clear)\b|погаси(?:ть|у)?|погашение)/i.test(text)
+  ) {
+    return commandByName("repay");
   }
 
   const words = text.split(/[^a-z]+/).filter(Boolean);

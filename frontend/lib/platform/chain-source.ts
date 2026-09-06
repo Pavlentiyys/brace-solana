@@ -17,7 +17,12 @@
  * instead of opening a wallet prompt that could not succeed.
  */
 
-import { decodeGuardConfig, looksLikeGuardAccount } from "@/lib/core/tx/decode";
+import {
+  decodeGuardConfig,
+  guardIdentity,
+  looksLikeGuardAccount,
+  needsMigration,
+} from "@/lib/core/tx/decode";
 import { GUARD_ACCOUNT_DISCRIMINATOR, PROGRAM_IS_DEPLOYED } from "@/lib/core/program";
 import { encodeBase58 } from "@/lib/core/tx/base58";
 import type { Guard } from "@/lib/core/guard";
@@ -37,13 +42,16 @@ import { Connection, PublicKey, Transaction, type TransactionInstruction } from 
 import {
   depositReserveIx,
   initGuardIx,
+  migrateGuardIx,
+  ownerRepayIx,
   revokeIx,
   updatePolicyIx,
   withdrawReserveIx,
   type GuardAccounts,
 } from "@/lib/platform/guard-tx";
-import { DEVNET_MARKET } from "@/lib/platform/devnet-market";
-import { WITHDRAW_ALL } from "@/lib/core/tx/instructions";
+import { DEVNET_MARKET, planRefresh } from "@/lib/platform/devnet-market";
+import { REPAY_ALL, WITHDRAW_ALL } from "@/lib/core/tx/instructions";
+import { validatePolicy, withSchedule } from "@/lib/core/policy";
 import type { DiscoveredPosition, Failure, GuardSource, Outcome, Snapshot } from "@/lib/platform/types";
 
 export class SourceError extends Error {
@@ -74,18 +82,36 @@ async function rpc<T>(url: string, method: string, params: unknown[]): Promise<T
   }
 
   if (!response.ok) {
-    // 429 is what a public endpoint returns first, and it deserves its own words
-    // rather than looking like the cluster is down.
-    const detail =
-      response.status === 429
-        ? "this endpoint is rate limiting the app. Set NEXT_PUBLIC_BRACE_RPC_URL to your own."
-        : `${method} returned ${response.status}`;
-    throw new SourceError({ kind: "rpc_unavailable", detail });
+    if (response.status === 429) {
+      throw new SourceError({
+        kind: "rpc_rate_limited",
+        detail: "This endpoint is rate limiting requests. Set NEXT_PUBLIC_BRACE_RPC_URL to a dedicated RPC.",
+      });
+    }
+    throw new SourceError({
+      kind: "rpc_request_failed",
+      method,
+      code: response.status,
+      detail: `${method} returned HTTP ${response.status}`,
+    });
   }
 
-  const body = (await response.json()) as RpcResponse<T>;
+  let body: RpcResponse<T>;
+  try {
+    body = (await response.json()) as RpcResponse<T>;
+  } catch {
+    throw new SourceError({ kind: "rpc_invalid_response", method, detail: "The response was not valid JSON." });
+  }
   if (body.error) {
-    throw new SourceError({ kind: "rpc_unavailable", detail: body.error.message });
+    throw new SourceError({
+      kind: "rpc_request_failed",
+      method,
+      code: body.error.code,
+      detail: body.error.message,
+    });
+  }
+  if (!Object.prototype.hasOwnProperty.call(body, "result")) {
+    throw new SourceError({ kind: "rpc_invalid_response", method, detail: "The response did not include a result." });
   }
   return body.result as T;
 }
@@ -117,6 +143,7 @@ export async function fetchObligations(
     {
       encoding: "base64",
       filters: [{ dataSize: OBLIGATION_SIZE }, { memcmp: { offset: O_OWNER, bytes: owner } }],
+      commitment: "confirmed",
     },
   ]);
 
@@ -146,7 +173,7 @@ async function fetchAccounts(
     const values = await rpc<{ value: (MaybeAccount | null)[] }>(
       config.rpcUrl,
       "getMultipleAccounts",
-      [batch, { encoding: "base64" }],
+      [batch, { encoding: "base64", commitment: "confirmed" }],
     );
     batch.forEach((key, position) => {
       const account = values.value[position];
@@ -184,13 +211,46 @@ export async function fetchGuards(config: PlatformConfig, owner: string): Promis
         { memcmp: { offset: 0, bytes: encodeBase58(new Uint8Array(GUARD_ACCOUNT_DISCRIMINATOR)) } },
         { memcmp: { offset: 8, bytes: owner } },
       ],
+      commitment: "confirmed",
     },
   ]);
 
   return accounts
     .map((account) => ({ pubkey: account.pubkey, bytes: base64ToBytes(account.account.data[0]) }))
     .filter((account) => looksLikeGuardAccount(account.bytes))
+    // A previous-layout account is a live authorization this reader cannot parse,
+    // not a guard that is absent. It comes back from `fetchStrandedGuards` instead,
+    // so the interface offers to restore it rather than offering to create a second
+    // one at an address that is already taken.
+    .filter((account) => !needsMigration(account.bytes))
     .map((account) => decodeGuardConfig(account.pubkey, account.bytes));
+}
+
+/** Guards written by a previous program, by the obligation each one watches. */
+export async function fetchStrandedGuards(
+  config: PlatformConfig,
+  owner: string,
+): Promise<Set<string>> {
+  if (!PROGRAM_IS_DEPLOYED) return new Set();
+
+  const accounts = await rpc<ProgramAccount[]>(config.rpcUrl, "getProgramAccounts", [
+    config.programId,
+    {
+      encoding: "base64",
+      filters: [
+        { memcmp: { offset: 0, bytes: encodeBase58(new Uint8Array(GUARD_ACCOUNT_DISCRIMINATOR)) } },
+        { memcmp: { offset: 8, bytes: owner } },
+      ],
+      commitment: "confirmed",
+    },
+  ]);
+
+  return new Set(
+    accounts
+      .map((account) => ({ pubkey: account.pubkey, bytes: base64ToBytes(account.account.data[0]) }))
+      .filter((account) => needsMigration(account.bytes))
+      .map((account) => guardIdentity(account.pubkey, account.bytes).obligation),
+  );
 }
 
 export async function fetchTokenBalance(
@@ -200,7 +260,7 @@ export async function fetchTokenBalance(
   const balance = await rpc<{ value: { amount: string } }>(
     config.rpcUrl,
     "getTokenAccountBalance",
-    [tokenAccount],
+    [tokenAccount, { commitment: "confirmed" }],
   );
   return BigInt(balance.value.amount);
 }
@@ -224,7 +284,7 @@ async function fetchWalletBalance(
   const accounts = await rpc<TokenAccounts>(config.rpcUrl, "getTokenAccountsByOwner", [
     owner,
     { mint },
-    { encoding: "jsonParsed" },
+    { encoding: "jsonParsed", commitment: "confirmed" },
   ]);
   return accounts.value.reduce(
     (total, entry) => total + BigInt(entry.account.data.parsed.info.tokenAmount.amount),
@@ -259,18 +319,18 @@ async function guardAccountsFor(
   const obligations = await fetchObligations(config, owner);
   const obligation = obligations.find((entry) => entry.address === obligationAddress);
   if (!obligation) {
-    return { kind: "unknown", detail: "That position is not owned by this address." };
+    return { kind: "position_not_found", detail: "That position is not owned by this address." };
   }
 
   const borrow = obligation.borrows[0];
   if (!borrow) {
-    return { kind: "unknown", detail: "That position has no borrow for the agent to repay." };
+    return { kind: "position_not_found", detail: "That position has no borrow for the agent to repay." };
   }
 
   const reserves = await fetchReserves(config, [borrow.reserve]);
   const reserve = reserves.get(borrow.reserve);
   if (!reserve) {
-    return { kind: "unknown", detail: "The debt reserve could not be read." };
+    return { kind: "reserve_not_found", detail: "The debt reserve could not be read." };
   }
 
   return {
@@ -319,10 +379,11 @@ export function createChainSource(config: PlatformConfig, signer: Signer | null 
     ];
     const marketKeys = [...new Set(obligations.map((obligation) => obligation.lendingMarket))];
 
-    const [reserves, markets, guards] = await Promise.all([
+    const [reserves, markets, guards, stranded] = await Promise.all([
       fetchReserves(config, reserveKeys),
       fetchAccounts(config, marketKeys),
       fetchGuards(config, owner),
+      fetchStrandedGuards(config, owner),
     ]);
 
     const positions: DiscoveredPosition[] = obligations.map((obligation) => {
@@ -344,6 +405,7 @@ export function createChainSource(config: PlatformConfig, signer: Signer | null 
           ? undefined
           : "This position holds collateral but has no borrow, so there is no debt for the agent to repay.",
         guard: guards.find((candidate) => candidate.obligation === obligation.address) ?? null,
+        guardNeedsMigration: stranded.has(obligation.address),
       };
     });
 
@@ -411,7 +473,7 @@ export function createChainSource(config: PlatformConfig, signer: Signer | null 
       const guards = await fetchGuards(config, signer.address);
       const guard = guards.find((candidate) => candidate.obligation === obligation);
       if (!guard) {
-        return { ok: false, failure: { kind: "unknown", detail: "No authorization on that position." } };
+        return { ok: false, failure: { kind: "guard_not_found", detail: "No authorization on that position." } };
       }
 
       return send(
@@ -423,7 +485,103 @@ export function createChainSource(config: PlatformConfig, signer: Signer | null 
     async revoke({ obligation }) {
       return send((accounts) => revokeIx(accounts), obligation);
     },
+
+    async migrateGuard({ obligation }) {
+      return send((accounts) => migrateGuardIx(accounts), obligation);
+    },
+
+    async setSchedule({ obligation, schedule }) {
+      if (signer === null) return { ok: false, failure: { kind: "wallet_unavailable" } };
+
+      // Same shape as `setPaused`, and for the same reason: `update_policy` rewrites
+      // the record, so the policy already on chain has to be read first or changing
+      // the schedule would quietly reset somebody's limits.
+      const guards = await fetchGuards(config, signer.address);
+      const guard = guards.find((candidate) => candidate.obligation === obligation);
+      if (!guard) {
+        return { ok: false, failure: { kind: "guard_not_found", detail: "No authorization on that position." } };
+      }
+
+      const policy = withSchedule(guard.policy, schedule);
+      const problems = validatePolicy(policy, { now: Math.floor(Date.now() / 1000) });
+      if (problems.length > 0) {
+        return {
+          ok: false,
+          failure: { kind: "invalid_policy", messages: problems.map((problem) => problem.message) },
+        };
+      }
+
+      return send(
+        (accounts) => updatePolicyIx(accounts, new PublicKey(guard.agent), policy, guard.paused),
+        obligation,
+      );
+    },
+
+    async repayNow({ obligation, amount }) {
+      if (!PROGRAM_IS_DEPLOYED) return NOT_DEPLOYED;
+      if (signer === null) return { ok: false, failure: { kind: "wallet_unavailable" } };
+
+      try {
+        const accounts = await guardAccountsFor(config, signer.address, obligation);
+        if (!("owner" in accounts)) return { ok: false, failure: accounts };
+
+        const connection = new Connection(config.rpcUrl, "confirmed");
+
+        // Unlike every other write here, this one cannot be a single instruction.
+        // The program refuses an obligation staler than two slots, so the refresh
+        // has to ride in the same transaction: a separate one would leave a window
+        // where a block lands in between and the repay fails on staleness.
+        const refresh = await planRefresh({ connection, owner: accounts.owner });
+        if (refresh === null) {
+          return {
+            ok: false,
+            failure: { kind: "position_not_found", detail: "The position could not be read to refresh it." },
+          };
+        }
+
+        const reserves = await obligationReserves(connection, accounts.obligation);
+        const deposits = reserves.filter((reserve) => !reserve.equals(accounts.debtReserve));
+
+        const transaction = new Transaction()
+          .add(...refresh.instructions)
+          .add(ownerRepayIx(accounts, amount ?? REPAY_ALL, deposits));
+
+        const { blockhash } = await connection.getLatestBlockhash("confirmed");
+        transaction.recentBlockhash = blockhash;
+        transaction.feePayer = accounts.owner;
+
+        const signature = await signer.signAndSend(transaction);
+        await connection.confirmTransaction(signature, "confirmed");
+        return { ok: true, signature };
+      } catch (error) {
+        return { ok: false, failure: asWriteFailure(error) };
+      }
+    },
   };
+}
+
+/**
+ * Every reserve the obligation references, deposits first, in its own order.
+ *
+ * Read here rather than taken from the snapshot because the remaining-account list
+ * has to match the account as it is at signing time. A snapshot is a second old and
+ * the program compares the list position by position.
+ */
+async function obligationReserves(
+  connection: Connection,
+  obligation: PublicKey,
+): Promise<PublicKey[]> {
+  const account = await connection.getAccountInfo(obligation, "confirmed");
+  if (account === null) return [];
+
+  const data = account.data;
+  const at = (offset: number) => new PublicKey(data.subarray(offset, offset + 32));
+  const used = (offset: number) => !data.subarray(offset, offset + 32).every((byte) => byte === 0);
+
+  return [
+    ...Array.from({ length: 8 }, (_, index) => 96 + index * 136).filter(used).map(at),
+    ...Array.from({ length: 5 }, (_, index) => 1_208 + index * 200).filter(used).map(at),
+  ];
 }
 
 /**
@@ -439,6 +597,16 @@ function asWriteFailure(error: unknown): Failure {
     return { kind: "wallet_rejected" };
   }
 
+  if (/wallet.*(locked|unlock)|please unlock/i.test(message)) {
+    return { kind: "wallet_locked" };
+  }
+  if (/already processing|request is already pending|device is busy/i.test(message)) {
+    return { kind: "wallet_busy" };
+  }
+  if (/wallet.*(disconnect|disconnected)|walletNotConnected/i.test(message)) {
+    return { kind: "wallet_disconnected" };
+  }
+
   // Anchor's `init` on a PDA that already exists fails in the System Program,
   // not in ours, so it never carries a guard error code. Without this it lands
   // in `unknown` and the user is shown whatever the wallet called it.
@@ -450,7 +618,27 @@ function asWriteFailure(error: unknown): Failure {
   if (custom) return { kind: "program_error", code: parseInt(custom[1], 16) };
 
   if (/blockhash not found|block height exceeded/i.test(message)) {
-    return { kind: "congested", retryable: true };
+    return /block height exceeded/i.test(message)
+      ? { kind: "confirmation_timeout" }
+      : { kind: "congested", retryable: true };
+  }
+  if (/insufficient funds for fee|insufficient lamports|fee payer/i.test(message)) {
+    return { kind: "insufficient_sol", detail: message };
+  }
+  if (/simulation failed|transaction simulation/i.test(message)) {
+    return { kind: "transaction_simulation_failed", detail: message };
+  }
+  if (/failed to send|send transaction/i.test(message)) {
+    return { kind: "transaction_send_failed", detail: message };
+  }
+  if (/account .*not found|could not find account/i.test(message)) {
+    return { kind: "account_not_found" };
+  }
+  if (/invalid account|invalid .*data|failed to deserialize/i.test(message)) {
+    return { kind: "invalid_account_data", detail: message };
+  }
+  if (/transaction failed|transaction.*err|instruction .*failed/i.test(message)) {
+    return { kind: "transaction_failed", detail: message };
   }
   return { kind: "unknown", detail: message };
 }

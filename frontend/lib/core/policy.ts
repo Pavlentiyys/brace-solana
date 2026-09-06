@@ -12,9 +12,12 @@
 
 import { BPS } from "@/lib/core/ltv/calc";
 import {
+  ACTION_SCHEDULED_REPAY,
+  ALLOWED_ACTIONS_SCHEDULED,
   ALLOWED_ACTIONS_V1,
   MAX_DELEGATION_SECONDS,
   MIN_COOLDOWN_SECONDS,
+  MIN_SCHEDULE_SECONDS,
   actionsInMask,
   type ActionKind,
 } from "@/lib/core/program";
@@ -31,6 +34,16 @@ export interface Policy {
   cooldownSeconds: number;
   /** Bitmask of `ACTION_*`. */
   allowedActions: number;
+  /**
+   * Seconds between scheduled repayments. Zero when the rule has no schedule.
+   *
+   * The program requires this to be zero unless `allowedActions` carries
+   * `ACTION_SCHEDULED_REPAY`, so a schedule cannot sit dormant in an account
+   * waiting for somebody to flip the bit.
+   */
+  scheduleSeconds: number;
+  /** Cap on one scheduled repayment, in base units of the reserve mint. */
+  scheduleAmount: bigint;
   /** Unix seconds. The authorization is dead after this instant. */
   expiresAt: number;
 }
@@ -43,6 +56,8 @@ export type PolicyField =
   | "windowSeconds"
   | "cooldownSeconds"
   | "allowedActions"
+  | "scheduleSeconds"
+  | "scheduleAmount"
   | "expiresAt";
 
 export interface PolicyProblem {
@@ -109,9 +124,36 @@ export function validatePolicy(policy: Policy, context: PolicyContext): PolicyPr
     reject("cooldownSeconds", `The program requires at least ${MIN_COOLDOWN_SECONDS} seconds between actions.`);
   }
 
-  // require!(allowed_actions == ACTION_REPAY)
-  if (policy.allowedActions !== ALLOWED_ACTIONS_V1) {
-    reject("allowedActions", "This version of the program repays debt and nothing else.");
+  // require!(allowed_actions == ACTION_REPAY || allowed_actions == ACTION_REPAY | ACTION_SCHEDULED_REPAY)
+  if (
+    policy.allowedActions !== ALLOWED_ACTIONS_V1 &&
+    policy.allowedActions !== ALLOWED_ACTIONS_SCHEDULED
+  ) {
+    reject(
+      "allowedActions",
+      "The program repays debt and nothing else, and emergency repay cannot be switched off.",
+    );
+  }
+
+  // The schedule block of `PolicyParams::validate`, both halves.
+  if ((policy.allowedActions & ACTION_SCHEDULED_REPAY) !== 0) {
+    if (policy.scheduleSeconds < MIN_SCHEDULE_SECONDS) {
+      reject("scheduleSeconds", "The shortest schedule the program accepts is one hour.");
+    }
+    if (policy.scheduleSeconds > MAX_DELEGATION_SECONDS) {
+      reject(
+        "scheduleSeconds",
+        "A schedule longer than the longest authorization could never run, so the program refuses it.",
+      );
+    }
+    if (policy.scheduleAmount <= 0n) {
+      reject("scheduleAmount", "A scheduled payment needs an amount above zero.");
+    }
+  } else if (policy.scheduleSeconds !== 0 || policy.scheduleAmount > 0n) {
+    reject(
+      "scheduleSeconds",
+      "The rule carries schedule settings it does not permit. The program refuses that rather than storing a schedule nobody switched on.",
+    );
   }
 
   // require!(expires_at > now && expires_at <= now + MAX_DELEGATION_SECONDS)
@@ -173,6 +215,60 @@ export function defaultPolicy(now: number): Policy {
     windowSeconds: 24 * 60 * 60,
     cooldownSeconds: 300,
     allowedActions: ALLOWED_ACTIONS_V1,
+    scheduleSeconds: 0,
+    scheduleAmount: 0n,
     expiresAt: now + 30 * 24 * 60 * 60,
   };
+}
+
+/** Whether this rule includes a repayment schedule. */
+export function hasSchedule(policy: Policy): boolean {
+  return (policy.allowedActions & ACTION_SCHEDULED_REPAY) !== 0 && policy.scheduleSeconds > 0;
+}
+
+/**
+ * The same policy with a schedule attached, or without one.
+ *
+ * Written as one function because the mask and the two numbers have to move
+ * together: the program rejects a policy that carries either half alone, and
+ * splitting this into setters is how that pair drifts apart.
+ */
+export function withSchedule(
+  policy: Policy,
+  schedule: { everySeconds: number; amount: bigint } | null,
+): Policy {
+  if (schedule === null) {
+    return { ...policy, allowedActions: ALLOWED_ACTIONS_V1, scheduleSeconds: 0, scheduleAmount: 0n };
+  }
+  return {
+    ...policy,
+    allowedActions: ALLOWED_ACTIONS_SCHEDULED,
+    scheduleSeconds: schedule.everySeconds,
+    scheduleAmount: schedule.amount,
+  };
+}
+
+/** Common intervals, as the chat offers them. */
+export const SCHEDULE_PRESETS = {
+  daily: 24 * 60 * 60,
+  weekly: 7 * 24 * 60 * 60,
+  fortnightly: 14 * 24 * 60 * 60,
+  monthly: 30 * 24 * 60 * 60,
+} as const;
+
+export type SchedulePreset = keyof typeof SCHEDULE_PRESETS;
+
+/**
+ * When the next scheduled payment is due, in unix seconds.
+ *
+ * Measured from the last run rather than from a fixed grid, matching
+ * `GuardConfig::schedule_due`. A payment that landed late moves the next one out;
+ * it does not leave a second one instantly owing.
+ */
+export function nextScheduledAt(guard: {
+  policy: Policy;
+  lastScheduledAt: number;
+}): number | null {
+  if (!hasSchedule(guard.policy)) return null;
+  return guard.lastScheduledAt + guard.policy.scheduleSeconds;
 }

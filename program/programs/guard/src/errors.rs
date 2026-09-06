@@ -46,4 +46,10 @@ pub enum GuardError {
     ClockMovedBackwards,
     #[msg("Post-CPI balance or health invariant failed")]
     PostCpiInvariant,
+    #[msg("Scheduled repay interval has not elapsed")]
+    ScheduleNotDue,
+    #[msg("Policy does not configure a repayment schedule")]
+    ScheduleNotConfigured,
+    #[msg("Owner key does not match guard config")]
+    UnauthorizedOwner,
 }

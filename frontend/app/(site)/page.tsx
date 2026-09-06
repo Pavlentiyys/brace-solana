@@ -1,4 +1,5 @@
 import { Capabilities } from "@/components/landing/capabilities";
+import { Comparison } from "@/components/landing/comparison";
 import { Hero } from "@/components/landing/hero";
 import { Limits } from "@/components/landing/limits";
 import { SimulatorSection } from "@/components/landing/simulator-section";
@@ -18,6 +19,7 @@ export default function Home() {
     <>
       <Hero />
       <SimulatorSection />
+      <Comparison />
       <Capabilities />
       <Limits />
     </>

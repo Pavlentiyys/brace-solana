@@ -31,7 +31,7 @@ use crate::{
     guard::{GuardConfigFixture, GUARD_CONFIG_LEN},
     ids::{
         err, ACTION_REPAY, FARMS_PROGRAM_ID, GUARD_PROGRAM_ID, INSTRUCTIONS_SYSVAR_ID,
-        KLEND_PROGRAM_ID, LENDING_MARKET_AUTH_SEED, SPL_TOKEN_ID,
+        KLEND_PROGRAM_ID, LENDING_MARKET_AUTH_SEED, SPL_TOKEN_ID, SYSTEM_PROGRAM_ID,
     },
     kamino::{
         q60, BorrowFixture, ObligationFixture, ReserveFixture, PRICE_STATUS_ALL_CHECKS,
@@ -88,6 +88,10 @@ impl TestEnv {
         let owner = Keypair::new();
         let agent = Keypair::new();
         svm.airdrop(&payer.pubkey(), 100_000_000_000).unwrap();
+        // The owner is normally a signer and not a payer, so it needs nothing. The
+        // exception is `migrate_guard`, where the owner pays the rent on the twenty
+        // bytes the account grows by.
+        svm.airdrop(&owner.pubkey(), 1_000_000_000).unwrap();
 
         let obligation = Pubkey::new_unique();
         let lending_market = Pubkey::new_unique();
@@ -119,12 +123,16 @@ impl TestEnv {
             window_seconds: 0,
             cooldown_seconds: 0,
             allowed_actions: 0,
+            schedule_seconds: 0,
+            schedule_amount: 0,
             expires_at: DEFAULT_TIMESTAMP + 86_400,
             paused: false,
             // A prior action exists, so the cooldown rule is live rather than skipped.
             last_action_at: DEFAULT_TIMESTAMP - 3_600,
             window_started_at: DEFAULT_TIMESTAMP - 60,
             actions_in_window: 0,
+            // Far enough back that a schedule, once a test arms one, reads as due.
+            last_scheduled_at: DEFAULT_TIMESTAMP - 30 * 24 * 60 * 60,
             total_actions: 1,
             total_repaid: 0,
             bump,
@@ -281,6 +289,73 @@ impl TestEnv {
             ],
             data: guard::withdraw_reserve_data(amount),
         }
+    }
+
+    /// `owner_repay`. Identical account list to `execute_action` with the owner in
+    /// the signer slot, which is the whole difference between the two grants.
+    pub fn owner_repay_ix(&self, amount: u64) -> Instruction {
+        self.owner_repay_ix_as(self.owner.pubkey(), amount)
+    }
+
+    /// The same instruction with somebody else in the owner slot, so a test can put
+    /// the agent there and watch `has_one = owner` refuse it.
+    pub fn owner_repay_ix_as(&self, owner: Pubkey, amount: u64) -> Instruction {
+        Instruction {
+            program_id: GUARD_PROGRAM_ID,
+            accounts: vec![
+                AccountMeta::new(self.guard, false),
+                AccountMeta::new(self.vault, false),
+                AccountMeta::new_readonly(owner, true),
+                AccountMeta::new(self.obligation, false),
+                AccountMeta::new_readonly(self.lending_market, false),
+                AccountMeta::new(self.debt_reserve, false),
+                AccountMeta::new_readonly(self.vault_mint, false),
+                AccountMeta::new(self.reserve_liquidity_supply, false),
+                AccountMeta::new_readonly(self.lending_market_authority, false),
+                AccountMeta::new_readonly(self.lending_program, false),
+                AccountMeta::new_readonly(FARMS_PROGRAM_ID, false),
+                AccountMeta::new_readonly(SPL_TOKEN_ID, false),
+                AccountMeta::new_readonly(INSTRUCTIONS_SYSVAR_ID, false),
+                AccountMeta::new(self.collateral_reserve, false),
+            ],
+            data: guard::owner_repay_data(amount),
+        }
+    }
+
+    /// Sends `execute_action` under the schedule grant, signed by the agent.
+    pub fn scheduled_repay(&mut self, amount: u64) -> Result<(), TransactionError> {
+        let ix = self.execute_action_ix(crate::ids::ACTION_SCHEDULED_REPAY, amount);
+        self.send(ix, SignedBy::Agent)
+    }
+
+    pub fn owner_repay(&mut self, amount: u64) -> Result<(), TransactionError> {
+        let ix = self.owner_repay_ix(amount);
+        self.send(ix, SignedBy::Owner)
+    }
+
+    /// `migrate_guard`, which the owner signs and pays the extra rent for.
+    pub fn migrate_ix(&self) -> Instruction {
+        Instruction {
+            program_id: GUARD_PROGRAM_ID,
+            accounts: vec![
+                AccountMeta::new(self.guard, false),
+                AccountMeta::new(self.owner.pubkey(), true),
+                AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
+            ],
+            data: guard::migrate_guard_data(),
+        }
+    }
+
+    /// Writes the guard in the layout the previous program used, so a test can run
+    /// the migration against the bytes it actually has to cope with.
+    pub fn install_previous_layout(&mut self) {
+        self.install();
+        set(
+            &mut self.svm,
+            self.guard,
+            self.config.to_previous_bytes(),
+            GUARD_PROGRAM_ID,
+        );
     }
 
     pub fn revoke_ix(&self) -> Instruction {

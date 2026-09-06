@@ -46,9 +46,14 @@ export function AuthorizeScreen() {
   // that differs between the server render and the client one is the last place to
   // discover that.
   const now = snapshot?.now ?? 0;
-  // No bot yet, so nothing has arrived from the chat and this screen says so rather
-  // than presenting starting values as though they were the user's decision.
-  const policy = useMemo(() => defaultPolicy(now), [now]);
+  // The guard is read from the selected position. Keep its policy as the source of
+  // truth whenever authorization already exists; otherwise this is a new
+  // authorization preview and the chat's standard starting policy is appropriate.
+  const existing = entry?.guard ?? null;
+  const policy = useMemo(
+    () => existing?.policy ?? defaultPolicy(now),
+    [existing, now],
+  );
 
   const problems = snapshot
     ? validatePolicy(policy, { now, liquidationLtvBps: entry?.position.liquidationLtvBps })
@@ -57,6 +62,9 @@ export function AuthorizeScreen() {
   const authorize = useGuardAction((source) =>
     source.authorize({ obligation: entry?.position.obligation ?? "", policy }),
   );
+  const migrate = useGuardAction((source) =>
+    source.migrateGuard({ obligation: entry?.position.obligation ?? "" }),
+  );
 
   const explorer = programExplorerUrl(config);
   const actions = policyActions(policy);
@@ -64,15 +72,39 @@ export function AuthorizeScreen() {
   if (failure && !snapshot) return <FailureNotice failure={failure} />;
   if (!snapshot) return <Note>Reading your position</Note>;
 
-  // The guard is already in the snapshot; this screen simply never looked at it
-  // and offered to create a second one, which fails inside the wallet's
-  // simulation and reaches the user as "unsafe transaction" then "unexpected
-  // error". The lists below still explain what was granted, so they stay.
-  const existing = entry?.guard ?? null;
+  // An authorization that exists but predates the current program. It is not
+  // missing, so offering to create one would fail at the wallet; it needs growing.
+  const stranded = entry?.guardNeedsMigration === true;
 
   return (
     <div className="flex max-w-[860px] flex-col gap-8">
       <PageHeading title={copy.heading} lead={copy.lead} />
+
+      {stranded ? (
+        <Card>
+          <CardTitle>
+            <StatusDot tone="warn" /> {copy.strandedHeading}
+          </CardTitle>
+          <p className="mt-3 max-w-[70ch] text-[13px] leading-relaxed text-ink-dim">
+            {copy.strandedBody}
+          </p>
+          <ActionButton
+            className="mt-4"
+            variant="primary"
+            busy={migrate.isPending}
+            onClick={() => migrate.mutate()}
+          >
+            {copy.strandedCta}
+          </ActionButton>
+          <Note className="mt-3 max-w-[70ch]">{copy.strandedNote}</Note>
+          {migrate.data && !migrate.data.ok ? (
+            <FailureNotice className="mt-3" failure={migrate.data.failure} />
+          ) : null}
+          {migrate.data?.ok ? (
+            <p className="mt-3 text-[13px] text-state-ok">{copy.strandedDone}</p>
+          ) : null}
+        </Card>
+      ) : null}
 
       {existing ? (
         <Card>
@@ -94,7 +126,7 @@ export function AuthorizeScreen() {
             <Row label={copy.existingExpiry} value={calendarDate(existing.policy.expiresAt)} />
           </Rows>
           <Link
-            href="/app"
+            href="/chat"
             className="mt-4 inline-block text-[13px] text-accent underline-offset-4 hover:underline"
           >
             {copy.existingCta}
@@ -197,7 +229,7 @@ export function AuthorizeScreen() {
           onClick={() =>
             authorize.mutate(undefined, {
               onSuccess: (outcome) => {
-                if (outcome.ok) router.push("/app/reserve");
+                if (outcome.ok) router.push("/chat/reserve");
               },
             })
           }

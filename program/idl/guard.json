@@ -385,6 +385,228 @@
       ]
     },
     {
+      "name": "migrate_guard",
+      "docs": [
+        "Grows a guard written before the repayment schedule to the current layout."
+      ],
+      "discriminator": [
+        175,
+        134,
+        32,
+        40,
+        68,
+        232,
+        134,
+        180
+      ],
+      "accounts": [
+        {
+          "name": "guard",
+          "docs": [
+            "deserialize by definition. Ownership is constrained here; the discriminator,",
+            "the length and the PDA seeds are all checked in the handler before a byte is",
+            "written."
+          ],
+          "writable": true
+        },
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "owner_repay",
+      "docs": [
+        "Repay from the reserve on the owner's own signature. `u64::MAX` means all of it."
+      ],
+      "discriminator": [
+        205,
+        18,
+        148,
+        210,
+        27,
+        12,
+        229,
+        49
+      ],
+      "accounts": [
+        {
+          "name": "guard",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "guard.owner",
+                "account": "GuardConfig"
+              },
+              {
+                "kind": "account",
+                "path": "guard.obligation",
+                "account": "GuardConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "guard"
+              }
+            ]
+          },
+          "relations": [
+            "guard"
+          ]
+        },
+        {
+          "name": "owner",
+          "signer": true,
+          "relations": [
+            "guard"
+          ]
+        },
+        {
+          "name": "obligation",
+          "writable": true,
+          "relations": [
+            "guard"
+          ]
+        },
+        {
+          "name": "lending_market",
+          "relations": [
+            "guard"
+          ]
+        },
+        {
+          "name": "debt_reserve",
+          "writable": true,
+          "relations": [
+            "guard"
+          ]
+        },
+        {
+          "name": "vault_mint",
+          "relations": [
+            "guard"
+          ]
+        },
+        {
+          "name": "reserve_liquidity_supply",
+          "writable": true
+        },
+        {
+          "name": "lending_market_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  109,
+                  97
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "lending_market"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                4,
+                178,
+                172,
+                177,
+                18,
+                88,
+                204,
+                227,
+                104,
+                44,
+                65,
+                139,
+                168,
+                114,
+                255,
+                61,
+                249,
+                17,
+                2,
+                113,
+                47,
+                21,
+                175,
+                18,
+                182,
+                190,
+                105,
+                179,
+                67,
+                91,
+                0,
+                8
+              ]
+            }
+          }
+        },
+        {
+          "name": "lending_program",
+          "address": "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD"
+        },
+        {
+          "name": "farms_program",
+          "address": "FarmsPZpWu9i7Kky8tPN37rs2TpmMrAZrC7S7vJa91Hr"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "instruction_sysvar",
+          "address": "Sysvar1nstructions1111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "revoke",
       "discriminator": [
         170,
@@ -649,6 +871,19 @@
       ]
     },
     {
+      "name": "OwnerRepaid",
+      "discriminator": [
+        33,
+        225,
+        224,
+        157,
+        151,
+        22,
+        5,
+        69
+      ]
+    },
+    {
       "name": "PolicyUpdated",
       "discriminator": [
         225,
@@ -798,6 +1033,21 @@
       "code": 6021,
       "name": "PostCpiInvariant",
       "msg": "Post-CPI balance or health invariant failed"
+    },
+    {
+      "code": 6022,
+      "name": "ScheduleNotDue",
+      "msg": "Scheduled repay interval has not elapsed"
+    },
+    {
+      "code": 6023,
+      "name": "ScheduleNotConfigured",
+      "msg": "Policy does not configure a repayment schedule"
+    },
+    {
+      "code": 6024,
+      "name": "UnauthorizedOwner",
+      "msg": "Owner key does not match guard config"
     }
   ],
   "types": [
@@ -837,6 +1087,18 @@
           {
             "name": "slot",
             "type": "u64"
+          },
+          {
+            "name": "action_kind",
+            "docs": [
+              "Which grant this repay was made under, as an `ACTION_*` bit.",
+              "",
+              "Appended rather than split into a second event, so the history keeps one",
+              "shape and a reader that ignores this field still gets the amounts right.",
+              "It matters because \"the agent repaid because your position was in danger\"",
+              "and \"the agent made your weekly payment\" are not the same sentence."
+            ],
+            "type": "u8"
           }
         ]
       }
@@ -903,6 +1165,24 @@
             "type": "u8"
           },
           {
+            "name": "schedule_seconds",
+            "docs": [
+              "Seconds between scheduled repays. Zero when there is no schedule."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "schedule_amount",
+            "docs": [
+              "Cap on one scheduled repay, in base units of the vault mint.",
+              "",
+              "Deliberately not `max_action_amount`. That one is sized for an emergency,",
+              "where the right number is \"enough to reach the target\"; this one is sized",
+              "for a routine payment, where the right number is a fraction of it."
+            ],
+            "type": "u64"
+          },
+          {
             "name": "expires_at",
             "type": "i64"
           },
@@ -921,6 +1201,13 @@
           {
             "name": "actions_in_window",
             "type": "u8"
+          },
+          {
+            "name": "last_scheduled_at",
+            "docs": [
+              "When the last scheduled repay ran. Its own clock, never the emergency one."
+            ],
+            "type": "i64"
           },
           {
             "name": "total_actions",
@@ -1014,6 +1301,53 @@
       }
     },
     {
+      "name": "OwnerRepaid",
+      "docs": [
+        "The owner spending their own reserve on their own debt.",
+        "",
+        "Separate from [`ActionExecuted`] because no delegation was exercised: this one",
+        "carries an owner signature, so it is not part of the record of what the agent",
+        "did while nobody was looking."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "guard",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "obligation",
+            "type": "pubkey"
+          },
+          {
+            "name": "requested_amount",
+            "type": "u64"
+          },
+          {
+            "name": "repaid_amount",
+            "type": "u64"
+          },
+          {
+            "name": "ltv_before_bps",
+            "type": "u16"
+          },
+          {
+            "name": "ltv_after_bps",
+            "type": "u16"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
       "name": "PolicyParams",
       "type": {
         "kind": "struct",
@@ -1045,6 +1379,14 @@
           {
             "name": "allowed_actions",
             "type": "u8"
+          },
+          {
+            "name": "schedule_seconds",
+            "type": "u32"
+          },
+          {
+            "name": "schedule_amount",
+            "type": "u64"
           },
           {
             "name": "expires_at",

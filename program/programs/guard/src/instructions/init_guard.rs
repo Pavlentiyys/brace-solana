@@ -108,6 +108,9 @@ pub fn init_guard_handler(ctx: Context<InitGuard>, args: InitGuardArgs) -> Resul
     guard.last_action_at = 0;
     guard.window_started_at = clock.unix_timestamp;
     guard.actions_in_window = 0;
+    // Counted from now, so a weekly schedule makes its first payment in a week
+    // rather than in the same block the authorization was granted.
+    guard.last_scheduled_at = clock.unix_timestamp;
     guard.total_actions = 0;
     guard.total_repaid = 0;
     guard.bump = ctx.bumps.guard;

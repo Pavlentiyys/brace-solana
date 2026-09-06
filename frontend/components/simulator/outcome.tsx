@@ -1,43 +1,47 @@
 import { en } from "@/content/en";
 import { cn } from "@/lib/cn";
-import { money, moneyPrecise, moneySigned, moneyWhole } from "@/lib/core/format";
+import { money, moneyPrecise, moneySigned } from "@/lib/core/format";
 import type { Branch, SimulationResult } from "@/lib/core/ltv/simulate";
 
 /**
- * The two numbers LANDING.md asks for, side by side, plus the three that
- * explain them. The difference is stated last and it is allowed to be
- * negative: on two of the three scenarios it is.
+ * One branch of the simulation: what the money was worth at the end, and the
+ * four figures that explain how it got there.
+ *
+ * `note` is only passed for the reserve-prepaid branch, which needs one line to
+ * say what it is. The other two are named by their titles.
  */
 function BranchColumn({
   title,
   branch,
   prices,
   emphasis,
+  note,
 }: {
   title: string;
   branch: Branch;
   prices: number[];
   emphasis: boolean;
+  note?: string;
 }) {
   const liquidated = branch.liquidatedAt !== null;
 
   return (
     <div className="bg-canvas p-5">
       <p className="text-[11px] text-ink-faint">{title}</p>
-      {/*
-        Whole dollars, not cents. Two of these sit side by side in a narrow
-        column, and "$4,644.10" at this size overflowed it. Cents on a
-        final-equity comparison were noise anyway; the difference row below
-        keeps them.
-      */}
+      {/* Cents are back. They were dropped when three of these had to share a
+          360px sidebar; at a third of the full width they fit. */}
       <p
         className={cn(
           "num mt-2 text-2xl leading-none",
           emphasis ? "text-ink" : "text-ink-dim",
         )}
       >
-        {moneyWhole(branch.finalEquity)}
+        {money(branch.finalEquity)}
       </p>
+
+      {note ? (
+        <p className="mt-2 max-w-[34ch] text-[12px] leading-snug text-ink-faint">{note}</p>
+      ) : null}
 
       <dl className="mt-5 flex flex-col gap-2 text-[12px]">
         <div className="flex items-baseline justify-between gap-3">
@@ -85,10 +89,17 @@ export function Outcome({ result }: { result: SimulationResult }) {
   const prepaid = result.reservePrepaid;
 
   return (
-    <div>
+    <div className="mt-10">
       <h3 className="text-[13px] text-ink">{en.simulator.resultHeading}</h3>
 
-      <div className="mt-4 grid gap-px overflow-hidden rounded-panel border border-line bg-line sm:grid-cols-2">
+      {/*
+        Three branches across, then the two differences beside them. This block
+        used to live in a 360px sidebar, where three columns could not hold the
+        figures and the reserve-prepaid case had to be demoted to its own row.
+        At full width all three read as what they are: the same money, spent
+        three ways.
+      */}
+      <div className="mt-4 grid gap-px overflow-hidden rounded-panel border border-line bg-line lg:grid-cols-3">
         <BranchColumn
           title={en.simulator.withAgent}
           branch={result.withAgent}
@@ -101,27 +112,16 @@ export function Outcome({ result }: { result: SimulationResult }) {
           prices={result.prices}
           emphasis={false}
         />
+        <BranchColumn
+          title={en.simulator.reservePrepaid}
+          branch={prepaid}
+          prices={result.prices}
+          emphasis={false}
+          note={en.simulator.reservePrepaidNote}
+        />
       </div>
 
-      {/*
-        Its own row rather than a third column. This is a different question from
-        the other two - not "did the agent act" but "what if you had spent the
-        money instead" - and three columns in this width could not hold the
-        numbers legibly anyway.
-      */}
-      <div className="mt-4 rounded-panel border border-line px-5 py-4">
-        <div className="flex items-baseline justify-between gap-4">
-          <p className="text-[11px] text-ink-faint">{en.simulator.reservePrepaid}</p>
-          <p className="num text-2xl leading-none text-ink-dim">
-            {moneyWhole(prepaid.finalEquity)}
-          </p>
-        </div>
-        <p className="mt-3 text-[12px] leading-relaxed text-ink-faint">
-          {en.simulator.reservePrepaidNote}
-        </p>
-      </div>
-
-      <div className="mt-4 divide-y divide-line overflow-hidden rounded-panel border border-line">
+      <div className="mt-4 grid overflow-hidden rounded-panel border border-line sm:grid-cols-2 sm:divide-x sm:divide-line">
         <Difference
           label={en.simulator.vsNothing}
           value={result.withAgent.finalEquity - result.withoutAgent.finalEquity}

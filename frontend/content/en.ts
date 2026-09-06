@@ -17,7 +17,8 @@
 export const en = {
   nav: {
     docs: "Docs",
-    app: "App",
+    app: "Chat",
+    connect: "Connect wallet",
     skipToContent: "Skip to content",
     openMenu: "Open menu",
     closeMenu: "Close menu",
@@ -51,8 +52,7 @@ export const en = {
     withAgent: "With the agent",
     withoutAgent: "With no agent",
     reservePrepaid: "Reserve repaid up front",
-    reservePrepaidNote:
-      "The same reserve spent on the debt at the start, then nobody acts again. It is the comparison that matters, because leaving the money idle beside a loan is not what anyone actually does with it.",
+    reservePrepaidNote: "The same money, spent on the debt at the start.",
     vsNothing: "Against leaving the reserve idle",
     vsPrepaid: "Against repaying with it instead",
     reserveLeft: "Reserve left",
@@ -70,8 +70,6 @@ export const en = {
     ruleTopUp: "Tops up collateral at",
     ruleRepay: "Repays debt at",
     v2: "v2",
-    v2Note:
-      "Topping up collateral arrives in v2: it needs a signature from you on every action. The deployed program repays debt and nothing else, so a rule with a top-up step cannot be authorized yet.",
     chart: {
       price: "Price",
       ltvWithAgent: "LTV with the agent",
@@ -88,14 +86,33 @@ export const en = {
     },
     // Written from the numbers the simulator actually produces, not from
     // guesses about what it produces.
+    // One line each. The outcome panel below already prints the equity, the
+    // reserve and the liquidation price, so prose that restates them is the
+    // reader paying twice for the same fact.
     takeaways: {
-      recovery:
-        "The rule worked. Without the agent the position was liquidated at $112.40 and the recovery arrived too late to matter.",
-      wick:
-        "The position was never in danger. Liquidation sat at $115.63 and the low was $128.10. The rule still spent $711.74, because it fires on a threshold and not on a forecast. It ended ahead here only because the reserve happened to buy SOL before SOL went back up, which is a coin flip on price direction and not something the agent knows.",
-      "no-rebound":
-        "This is the case that costs you money. Topping up converted the reserve into the asset that was falling. Liquidation was delayed from $113.60 to $77.40 and then happened anyway, with the reserve gone.",
+      recovery: "The rule worked. Doing nothing meant liquidation at $112.40.",
+      wick: "Nothing was ever at risk. The rule spent $711.74 anyway.",
+      "no-rebound": "The reserve bought a falling asset. Liquidation came regardless.",
     } as Record<string, string>,
+  },
+
+
+  /**
+   * Both numbers come from the protocols' own source, not their marketing.
+   * Kamino caps the executor bonus at `EXECUTION_BONUS_SANITY_LIMIT = 0.1` in
+   * `obligation_order_operations.rs`; MarginFi caps it at
+   * `ORDER_EXECUTION_MAX_FEE = 0.05`. Both unwind the position to do it.
+   */
+  comparison: {
+    heading: "Both protocols sell your position. This one does not.",
+    lead: "Reaching your threshold hands the collateral to whoever executes the order.",
+    columns: ["Kamino order", "MarginFi order", "Brace"],
+    rows: [
+      { label: "Your collateral", values: ["sold", "sold", "kept"] },
+      { label: "Paid to the executor", values: ["up to 10%", "up to 5%", "network fee only"] },
+      { label: "Funded in advance", values: ["nothing", "nothing", "a reserve you own"] },
+    ],
+    note: "Read from each program's source, September 2026.",
   },
 
   capabilities: {
@@ -108,9 +125,9 @@ export const en = {
       { label: "Add collateral from your reserve", v2: true },
     ],
     canConstraints: [
-      "Only once your LTV reaches the threshold you set",
-      "No more often than your rate limit allows",
-      "No more than the amount you cap",
+      "Only above the threshold you set",
+      "Only within your rate limit",
+      "Only up to the amount you cap",
     ],
     cannotHeading: "Cannot",
     cannot: [
@@ -124,29 +141,31 @@ export const en = {
 
   limits: {
     heading: "When the agent does not help",
-    body: "Every number below comes from the simulator above. You can reproduce all three.",
+    body: "Every number below comes from the simulator above.",
+    // One line each. The figure beside it is computed from the same simulation
+    // the reader just ran, and it makes the point faster than a sentence can.
     cases: [
       {
         title: "The reserve runs out",
-        body: "The rule can only spend what you put in. When the reserve is empty the agent stops acting and your position carries on falling without it.",
-        figureLabel: "reserve left after three actions in the third scenario",
+        body: "The rule spends only what you put in. Then it stops.",
+        figureLabel: "reserve left after three actions",
       },
       {
         title: "A fall with no rebound",
-        body: "Topping up converts your reserve into the asset that is falling. It delays liquidation and it can leave you with less than doing nothing at all.",
-        figureLabel: "worse off with the agent in the third scenario",
+        body: "Topping up buys the asset that is falling.",
+        figureLabel: "worse off than doing nothing",
       },
       {
         title: "A spike that reverses",
-        body: "The rule fires on a threshold, not on a forecast. A move that reverses within the hour still spends the reserve and still pays the fees.",
-        figureLabel: "spent in the second scenario on a position that was never at risk",
+        body: "The rule fires on a threshold, not on a forecast.",
+        figureLabel: "spent on a position never at risk",
       },
     ],
   },
 
   start: {
     heading: "Getting started",
-    cta: "Open the app",
+    cta: "Open the chat",
     ctaNote:
       "The app is the third step. Without a wallet it opens a demo world you can make fail on purpose. With Phantom on devnet it reads your own Kamino positions.",
     steps: [
@@ -162,14 +181,14 @@ export const en = {
       },
       {
         title: "Grant authorization and fund the reserve",
-        body: "Two signatures in the web app. This is the only step that needs your wallet, and it is the only thing the chat cannot do.",
+        body: "Two signatures on a signing screen. This is the only step that needs your wallet, and the only thing the conversation cannot do.",
         requires: "A wallet",
       },
     ],
   },
 
   footer: {
-    app: "App",
+    app: "Chat",
     docs: "Documentation",
     exit: "How to take everything and leave",
     program: "Program",
@@ -205,7 +224,7 @@ export const en = {
       notConfigured:
         "No RPC endpoint is configured, so this app runs against a world in your browser. The price moves, the rule fires, the reserve goes down. Nothing here touches a chain and no receipt has a transaction to link to.",
       programNotDeployed:
-        "An RPC endpoint is configured, but the program id it is pointed at has nothing deployed behind it, so there is nothing to read. Until that changes the app runs against a world in your browser.",
+        "An RPC endpoint is configured, but the program id it is pointed at has nothing deployed behind it, so there is nothing to read. Until that changes the chat runs against a world in your browser.",
       /**
        * Shown only once a browser wallet is connected. Without it the banner reads
        * as though the address is fake too, and a user who then recognises their own
@@ -220,14 +239,16 @@ export const en = {
     chat: {
       heading: "Brace",
       lead:
-        "Ask about the position in your own words. Actions open the same guarded panels the app would render; broader questions go to the assistant.",
+        "Ask about the position in your own words. Actions open the guarded panels; broader questions go to the assistant.",
       placeholder: "How close am I to liquidation?",
       inputLabel: "Ask the agent",
       send: "Send",
       newChat: "New chat",
       deleteChat: "Delete chat",
+      deleted: "Chat deleted",
+      undo: "Undo",
       note:
-        "Your chats are kept in this browser so the list survives a reload, and never leave it. Delete any of them with the × beside its name. Free-form questions go to Brace's server-side language model route.",
+        "Your chats are kept in this browser and never leave it. Free-form questions go to Brace's server-side language model route.",
     },
 
     openPosition: {
@@ -247,7 +268,7 @@ export const en = {
         "The demo wallet cannot sign. Connect Phantom to open a position on the cluster.",
       rejected: "You dismissed the wallet prompt. Nothing was sent.",
       wrongCluster:
-        "This market lives on {cluster}. Point the app there to open a position.",
+        "This market lives on {cluster}. Point the chat there to open a position.",
       done: "Done. Ask how the position is doing and it will read back off the cluster.",
     },
 
@@ -264,7 +285,7 @@ export const en = {
 
     connect: {
       heading: "Connect a wallet",
-      body: "The web app exists for the four things that need a signature: authorization, funding the reserve, withdrawing it, and revoking. Everything else lives in the chat.",
+      body: "Four things need a signature: authorization, funding the reserve, withdrawing it, and revoking. Everything else happens in the conversation.",
       unavailable:
         "No Solana wallet is installed in this browser. Install one, then reload this page.",
       connecting: "Waiting for the wallet",
@@ -281,7 +302,7 @@ export const en = {
         "This app is pointed at {cluster}. Your address is the same on every cluster, but balances and anything you sign are not, so set Phantom to {cluster} under Settings, Developer Settings before you authorize.",
       installTitle: "Phantom is not installed in this browser",
       installBody:
-        "Install it and reload this page, or look around the app first with the demo wallet.",
+        "Install it and reload this page, or look around the chat first with the demo wallet.",
       installCta: "Get Phantom",
       demoFallback: "Continue with the demo wallet",
       demoFallbackNote:
@@ -382,6 +403,9 @@ export const en = {
         manage: "Fund or withdraw",
       },
       authority: {
+        nextPayment: "Scheduled payment",
+        everyLabel: "every",
+        nextIn: "next in",
         label: "Authorization",
         expiresOn: "Ends on",
         left: "left",
@@ -399,7 +423,7 @@ export const en = {
         sentence:
           "When LTV reaches {trigger}, repay from the reserve until LTV is back to {target}, at most {cap} in one action and at most {count} times per {window}.",
         changeInChat: "Change this in the chat",
-        changeNote: "Rules are set in conversation, not in a form. The web app only shows what is set.",
+        changeNote: "Rules are set in conversation, not in a form. This screen only shows what is set.",
       },
       controls: {
         pause: "Pause the agent",
@@ -425,13 +449,21 @@ export const en = {
       existingStatus: "Status",
       existingExpiry: "Ends on",
       existingCta: "Open the position panel",
+      strandedHeading: "Your authorization needs one transaction to be readable again",
+      strandedBody:
+        "The program was upgraded and the record of your authorization is stored in the older shape, which this version cannot read. Nothing was lost and nothing was revoked. One transaction moves it into the new shape, and your rule, your agent, your expiry and your reserve all stay exactly as they are.",
+      strandedCta: "Restore the authorization",
+      strandedNote:
+        "It costs the rent on twenty extra bytes, which is a fraction of a cent, and it can only be signed by the wallet that owns the position.",
+      strandedDone: "Restored. Your authorization reads normally again.",
       heading: "What you are about to allow",
       lead: "This is the only thing the chat cannot do for you. Read the two lists before you sign; they are generated from the program, not written by hand.",
       canHeading: "The agent will be able to",
       cannotHeading: "The agent will not be able to",
       can: {
-        repay: "Repay part of your debt from your reserve",
+        repay: "Repay part of your debt from your reserve when it reaches your trigger",
         top_up: "Add collateral from your reserve",
+        scheduled_repay: "Make the repayment you scheduled, whatever the price is doing",
       },
       cannot: [
         "Send funds to any other address",
@@ -464,6 +496,44 @@ export const en = {
       ruleFallback:
         "No rule has arrived from the chat, so these are starting values. Set your rule in the chat first if you want different ones.",
     },
+    repayNow: {
+      heading: "Repay now",
+      body: "This one is yours to make, not the agent's. Nothing in the rule applies: the trigger, the target, the cooldown and the action window all exist to bound what somebody else may do with your reserve, and none of them are bounding you.",
+      reserve: "In the reserve",
+      debt: "Outstanding debt",
+      ltv: "LTV now",
+      amount: "Amount to repay",
+      repayPart: "Repay this much",
+      repayAll: "Repay everything in the reserve",
+      overReserve: "That is more than the reserve holds.",
+      note: "Everything means the whole reserve, not the whole debt. Kamino settles a repay at whatever is outstanding, so a reserve larger than the loan clears it and keeps the difference.",
+      needsGuard: "There is no authorization on this position yet, so there is no reserve to spend.",
+      done: "Repaid. The panel will show the new figures on its next read.",
+    },
+
+    schedule: {
+      heading: "Repay on a schedule",
+      body: "A standing payment: this much, this often, whatever the price is doing. It is the one thing the agent may do to a position that is in no danger at all, so it is a permission rather than a limit and it is granted separately from the rest of the rule.",
+      none: "No schedule. The agent only acts when your position reaches the trigger.",
+      every: "How often",
+      amount: "Amount each time",
+      currentEvery: "Runs every",
+      currentAmount: "Amount each time",
+      nextDue: "Next payment",
+      presets: {
+        daily: "Every day",
+        weekly: "Every week",
+        fortnightly: "Every two weeks",
+        monthly: "Every month",
+      },
+      start: "Start the schedule",
+      update: "Update the schedule",
+      stop: "Stop the schedule",
+      note: "The schedule has its own budget. A scheduled payment never spends the cooldown or the action window the emergency repay depends on, so a routine payment cannot leave the agent unable to act on a crash.",
+      needsGuard: "There is no authorization on this position yet, so there is nothing to schedule.",
+      done: "Saved. The agent reads the new schedule on its next check.",
+    },
+
     reserve: {
       title: "Reserve",
       heading: "The money the agent is allowed to spend",
@@ -519,13 +589,49 @@ export const en = {
         title: "You dismissed the wallet prompt",
         body: "Nothing was sent and nothing changed. Try again when you are ready.",
       },
+      wallet_locked: {
+        title: "Unlock your wallet",
+        body: "The wallet is installed but locked. Unlock it, then try the operation again.",
+      },
+      wallet_busy: {
+        title: "The wallet is already processing a request",
+        body: "Finish or dismiss the wallet request that is open, then try again.",
+      },
+      wallet_disconnected: {
+        title: "The wallet disconnected",
+        body: "Reconnect the wallet and confirm that the selected account owns this position.",
+      },
       insufficient_funds: {
         title: "Not enough to cover that",
         body: "The amount is above the balance available for it.",
       },
+      insufficient_sol: {
+        title: "Not enough SOL for the network fee",
+        body: "Add devnet SOL to the connected wallet, then try the operation again.",
+      },
       rpc_unavailable: {
         title: "Cannot reach the network",
         body: "The numbers below are the last ones that arrived and they are not being updated. Nothing has happened to your position because of this, but this app cannot see it right now.",
+      },
+      rpc_rate_limited: {
+        title: "The RPC endpoint is rate-limiting requests",
+        body: "Wait briefly or configure a dedicated Solana RPC endpoint, then retry.",
+      },
+      rpc_invalid_response: {
+        title: "The RPC returned an invalid response",
+        body: "The app could not verify this network response, so it did not use it for the position view.",
+      },
+      rpc_request_failed: {
+        title: "The RPC request failed",
+        body: "The node rejected a data request. No transaction was sent by this read operation.",
+      },
+      account_not_found: {
+        title: "An on-chain account was not found",
+        body: "The position or guard may have changed. Refresh the position list and try again.",
+      },
+      invalid_account_data: {
+        title: "An on-chain account has an unexpected format",
+        body: "The app refused to decode it as a valid Kamino or Brace account.",
       },
       price_stale: {
         title: "The price behind these numbers is old",
@@ -534,6 +640,42 @@ export const en = {
       congested: {
         title: "The network did not accept the transaction",
         body: "Solana was busy enough to drop it. Sending it again with a higher priority fee usually works.",
+      },
+      confirmation_timeout: {
+        title: "Confirmation is taking too long",
+        body: "The transaction may still be processing. Check the signature before sending it again.",
+      },
+      transaction_simulation_failed: {
+        title: "The transaction failed simulation",
+        body: "The wallet rejected it before submission. Review the position and operation details, then try again.",
+      },
+      transaction_send_failed: {
+        title: "The transaction could not be sent",
+        body: "The network did not accept the submission. Nothing was confirmed by the app.",
+      },
+      transaction_failed: {
+        title: "The transaction failed on chain",
+        body: "The network returned a failed transaction. The position remains unchanged by this attempt.",
+      },
+      invalid_amount: {
+        title: "The amount is invalid",
+        body: "Enter an amount greater than zero that is within the available balance.",
+      },
+      position_not_found: {
+        title: "The selected position was not found",
+        body: "It may have changed or been closed. Read the position list again before retrying.",
+      },
+      reserve_not_found: {
+        title: "The debt reserve was not found",
+        body: "The position's reserve could not be verified, so the operation was not prepared.",
+      },
+      guard_not_found: {
+        title: "The guard authorization was not found",
+        body: "The position may have changed in another wallet session. Read it again before retrying.",
+      },
+      guard_current: {
+        title: "The guard is already up to date",
+        body: "No transaction was needed because the requested state is already recorded.",
       },
       authorization_expired: {
         title: "The authorization ended while you were on this page",

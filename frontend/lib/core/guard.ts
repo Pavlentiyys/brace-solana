@@ -29,6 +29,12 @@ export interface Guard {
   lastActionAt: number;
   windowStartedAt: number;
   actionsInWindow: number;
+  /**
+   * Unix seconds of the last scheduled payment, and the clock the next one is
+   * measured from. Set at authorization, so a weekly schedule pays in a week
+   * rather than immediately.
+   */
+  lastScheduledAt: number;
   totalActions: number;
   /** Base units of the reserve mint, cumulative. */
   totalRepaid: bigint;

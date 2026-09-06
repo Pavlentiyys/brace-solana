@@ -3,6 +3,8 @@ import { JetBrains_Mono, Sora } from "next/font/google";
 
 import { en } from "@/content/en";
 import { site } from "@/content/site";
+import { SiteHeader } from "@/components/site/site-header";
+import { PlatformProvider } from "@/lib/platform/provider";
 import "./globals.css";
 
 const jetbrainsMono = JetBrains_Mono({
@@ -48,9 +50,13 @@ export const viewport: Viewport = {
 /**
  * Everything shared by both halves of the site and nothing else.
  *
- * The marketing pages and the app section carry different chrome, so the header and
- * the footer belong to their own layouts rather than to this one. A panel somebody
- * checks on a phone during a fall does not need a footer of links under it.
+ * The footer still belongs to the marketing layout: a panel somebody checks on a
+ * phone during a fall does not need a column of links under it.
+ *
+ * `PlatformProvider` moved up here so the header can offer the wallet on every
+ * page. It costs nothing on the landing page: the provider only detects an
+ * injected extension, and the snapshot query that polls the chain is gated on
+ * `address !== null`, so nothing is fetched until somebody connects.
  */
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
@@ -61,7 +67,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       data-scroll-behavior="smooth"
       className={`${jetbrainsMono.variable} ${sora.variable} h-full antialiased`}
     >
-      <body className="grain flex min-h-full flex-col">
+      <body className="grain flex h-full min-h-full flex-col">
         <a
           href="#main"
           className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-panel focus:bg-accent focus:px-4 focus:py-2 focus:text-[14px] focus:text-canvas"
@@ -69,7 +75,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           {en.nav.skipToContent}
         </a>
 
-        {children}
+        <PlatformProvider>
+          <SiteHeader />
+          {children}
+        </PlatformProvider>
       </body>
     </html>
   );

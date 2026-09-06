@@ -51,11 +51,18 @@ pub fn update_policy_handler(ctx: Context<UpdatePolicy>, args: UpdatePolicyArgs)
     );
 
     let guard = &mut ctx.accounts.guard;
+    let schedule_was_off = guard.schedule_seconds == 0;
     guard.agent = args.agent;
     args.policy.apply_to(guard);
     guard.paused = args.paused;
     guard.window_started_at = now;
     guard.actions_in_window = 0;
+    // Arming a schedule starts its clock here. Without this, a guard that has been
+    // authorized for a month would count that month as elapsed and make its first
+    // "weekly" payment in the same block the owner turned the schedule on.
+    if schedule_was_off && guard.schedule_seconds > 0 {
+        guard.last_scheduled_at = now;
+    }
 
     emit!(PolicyUpdated {
         guard: guard.key(),

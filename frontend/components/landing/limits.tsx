@@ -1,6 +1,9 @@
+import type { ReactNode } from "react";
+
 import { Reveal } from "@/components/ui/reveal";
 import { Section, SectionHeading, SectionLead } from "@/components/ui/section";
 import { en } from "@/content/en";
+import { cn } from "@/lib/cn";
 import { money } from "@/lib/core/format";
 import { simulate } from "@/lib/core/ltv/simulate";
 import {
@@ -19,8 +22,8 @@ import {
  * above, not written by hand. If the engine changes, these change with it, and
  * a claim that stops being true stops being printed.
  *
- * Three cells, three sizes, three different visuals. Nothing here is a stock
- * card with an icon in the corner.
+ * Three rows on hairlines. The loss leads, because it is the point; the reserve
+ * drain and the wick follow with their own drawn evidence.
  */
 
 function runScenario(id: string) {
@@ -44,7 +47,7 @@ function ReserveDrain() {
   }
 
   return (
-    <div className="mt-6 flex items-end gap-1.5" aria-hidden="true">
+    <div className="flex h-11 w-32 shrink-0 items-end gap-1.5" aria-hidden="true">
       {steps.map((value, index) => (
         <div key={index} className="flex-1">
           <div
@@ -87,12 +90,64 @@ function WickSpark() {
   );
 }
 
+/**
+ * One case per row: what goes wrong on the left, what it cost on the right.
+ *
+ * The loss in the no-rebound case gets `emphasis`, because it is the number the
+ * section exists for and the only one on the page printed in the danger colour.
+ */
+function LimitRow({
+  title,
+  body,
+  figure,
+  label,
+  visual,
+  emphasis = false,
+}: {
+  title: string;
+  body: string;
+  figure: string;
+  label: string;
+  visual?: ReactNode;
+  emphasis?: boolean;
+}) {
+  // Aligned to the top, not to a baseline. The figure is two to three times the
+  // body's size, so a shared baseline drops the title well below its own number
+  // and the row reads as broken.
+  return (
+    <article className="grid gap-4 border-t border-line py-7 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-10">
+      <div>
+        <h3 className="text-[15px] text-ink">{title}</h3>
+        <p className="mt-2 max-w-[46ch] text-[13px] leading-relaxed text-ink-dim">{body}</p>
+      </div>
+
+      <div className="flex items-start gap-5 sm:justify-end">
+        {visual}
+        <div className="sm:text-right">
+          <p
+            className={cn(
+              "num leading-none",
+              emphasis ? "text-4xl text-state-danger md:text-5xl" : "text-2xl text-ink",
+            )}
+          >
+            {figure}
+          </p>
+          <p className="mt-2 max-w-[26ch] text-[12px] leading-snug text-ink-faint sm:ml-auto">
+            {label}
+          </p>
+        </div>
+      </div>
+    </article>
+  );
+}
+
 export function Limits() {
   const noRebound = runScenario("no-rebound");
   const wick = runScenario("wick");
 
   const difference = noRebound.withAgent.finalEquity - noRebound.withoutAgent.finalEquity;
   const [reserveCase, noReboundCase, wickCase] = en.limits.cases;
+
 
   return (
     <Section id="limits">
@@ -101,55 +156,39 @@ export function Limits() {
         <SectionLead>{en.limits.body}</SectionLead>
       </Reveal>
 
+      {/*
+        Three rows on hairlines, not three bordered cards.
+
+        The cards were the third and fourth and fifth boxed panel on a page that
+        already had two, and a row of identical containers reads as one shape
+        repeated rather than three separate facts. Dividers and alignment carry
+        the grouping; the figure on the right is what the eye lands on.
+      */}
       <Reveal delay={0.05}>
-        <div className="mt-10 grid gap-4 lg:grid-cols-5">
-          {/* The reserve emptying, as the bars it actually produces. */}
-          <article className="rounded-panel border border-line p-6 lg:col-span-2">
-            <h3 className="text-[15px] text-ink">{reserveCase.title}</h3>
-            <p className="mt-3 text-[13px] leading-relaxed text-ink-dim">{reserveCase.body}</p>
-            <ReserveDrain />
-            <p className="num mt-4 text-2xl text-ink">{money(noRebound.withAgent.reserveLeft)}</p>
-            <p className="mt-1 text-[12px] leading-snug text-ink-faint">
-              {reserveCase.figureLabel}
-            </p>
-          </article>
+        <div className="mt-10 flex flex-col">
+          <LimitRow
+            title={noReboundCase.title}
+            body={noReboundCase.body}
+            figure={money(difference)}
+            label={noReboundCase.figureLabel}
+            emphasis
+          />
 
-          {/* The number that matters most on the page. */}
-          <article className="rounded-panel border border-line p-6 lg:col-span-3">
-            <h3 className="text-[15px] text-ink">{noReboundCase.title}</h3>
-            <p className="mt-3 max-w-[46ch] text-[13px] leading-relaxed text-ink-dim">
-              {noReboundCase.body}
-            </p>
-            <p className="num mt-8 text-4xl leading-none text-state-danger md:text-5xl">
-              {money(difference)}
-            </p>
-            <p className="mt-3 text-[12px] leading-snug text-ink-faint">
-              {noReboundCase.figureLabel}
-            </p>
-          </article>
+          <LimitRow
+            title={reserveCase.title}
+            body={reserveCase.body}
+            figure={money(noRebound.withAgent.reserveLeft)}
+            label={reserveCase.figureLabel}
+            visual={<ReserveDrain />}
+          />
 
-          {/* Full width and laid out sideways, so it does not read as a third
-              copy of the two above. */}
-          <article className="rounded-panel border border-line p-6 lg:col-span-5">
-            <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
-              <div className="max-w-[52ch]">
-                <h3 className="text-[15px] text-ink">{wickCase.title}</h3>
-                <p className="mt-3 text-[13px] leading-relaxed text-ink-dim">{wickCase.body}</p>
-              </div>
-
-              <div className="flex items-start gap-6">
-                <WickSpark />
-                <div>
-                  <p className="num text-2xl leading-none text-ink">
-                    {money(wick.withAgent.actions[0]?.spent ?? 0)}
-                  </p>
-                  <p className="mt-2 max-w-[26ch] text-[12px] leading-snug text-ink-faint">
-                    {wickCase.figureLabel}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </article>
+          <LimitRow
+            title={wickCase.title}
+            body={wickCase.body}
+            figure={money(wick.withAgent.actions[0]?.spent ?? 0)}
+            label={wickCase.figureLabel}
+            visual={<WickSpark />}
+          />
         </div>
       </Reveal>
     </Section>

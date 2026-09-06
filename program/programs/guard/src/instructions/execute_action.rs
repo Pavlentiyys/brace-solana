@@ -5,14 +5,35 @@ use crate::{
     adapter::{kamino::Kamino, MarketAdapter, RepayAccounts},
     errors::GuardError,
     events::ActionExecuted,
-    math::{
-        adjusted_repay_value, adjusted_value_for_borrow_reduction, ltv_bps, repay_value_for_target,
+    instructions::repay_health::{
+        validate_freshness, validate_post_cpi_health, validate_pre_cpi_health, RepayMode,
     },
     state::{
-        GuardConfig, ACTION_REPAY, FARMS_PROGRAM_ID, KLEND_PROGRAM_ID, LENDING_MARKET_AUTH_SEED,
-        MAX_OBLIGATION_STALENESS_SLOTS, SEED_GUARD, SEED_VAULT,
+        GuardConfig, WindowState, ACTION_REPAY, ACTION_SCHEDULED_REPAY, FARMS_PROGRAM_ID,
+        KLEND_PROGRAM_ID, LENDING_MARKET_AUTH_SEED, SEED_GUARD, SEED_VAULT,
     },
 };
+
+/// What the agent was allowed to do, decided before anything is read from Kamino.
+///
+/// Carrying the window forward rather than recomputing it after the CPI keeps the
+/// accounting on the same view of the clock the permission was granted against.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Authorization {
+    /// The LTV rule fired. Spends a slot in the action window.
+    Emergency(WindowState),
+    /// The schedule came due. Bounded by its own interval and nothing else.
+    Scheduled,
+}
+
+impl Authorization {
+    fn mode(self) -> RepayMode {
+        match self {
+            Authorization::Emergency(_) => RepayMode::Trigger,
+            Authorization::Scheduled => RepayMode::Planned,
+        }
+    }
+}
 
 #[derive(Accounts)]
 pub struct ExecuteAction<'info> {
@@ -86,7 +107,7 @@ pub fn execute_action_handler<'info>(
     let clock = Clock::get()?;
     let guard = &ctx.accounts.guard;
 
-    let next_window = validate_execution_policy(
+    let authorization = validate_execution_policy(
         guard,
         ctx.accounts.agent.key(),
         clock.unix_timestamp,
@@ -94,6 +115,7 @@ pub fn execute_action_handler<'info>(
         amount,
         ctx.accounts.vault.amount,
     )?;
+    let mode = authorization.mode();
 
     let position_before = Kamino::read_position(
         &ctx.accounts.obligation.to_account_info(),
@@ -120,7 +142,7 @@ pub fn execute_action_handler<'info>(
         &guard.lending_market,
     )?;
 
-    let ltv_before = validate_pre_cpi_health(guard, &position_before, amount)?;
+    let ltv_before = validate_pre_cpi_health(guard, &position_before, amount, mode)?;
 
     let guard_key = guard.key();
     let vault_bump = guard.vault_bump;
@@ -151,8 +173,16 @@ pub fn execute_action_handler<'info>(
     let repaid_amount = vault_balance_before
         .checked_sub(ctx.accounts.vault.amount)
         .ok_or(GuardError::PostCpiInvariant)?;
+    // Measured against the cap of the grant that authorized this call, not against
+    // whichever cap is larger. The schedule's cap is the smaller of the two by
+    // design, and letting a scheduled repay settle under the emergency cap would
+    // hand it the emergency's spending power.
+    let spend_cap = match authorization {
+        Authorization::Emergency(_) => guard.max_action_amount,
+        Authorization::Scheduled => guard.schedule_amount,
+    };
     require!(
-        repaid_amount > 0 && repaid_amount <= guard.max_action_amount,
+        repaid_amount > 0 && repaid_amount <= spend_cap,
         GuardError::PostCpiInvariant
     );
 
@@ -160,10 +190,18 @@ pub fn execute_action_handler<'info>(
         &ctx.accounts.obligation.to_account_info(),
         &ctx.accounts.debt_reserve.key(),
     )?;
-    let ltv_after = validate_post_cpi_health(guard, &position_before, &position_after, ltv_before)?;
+    let ltv_after =
+        validate_post_cpi_health(guard, &position_before, &position_after, ltv_before, mode)?;
 
     let guard = &mut ctx.accounts.guard;
-    guard.record_action(clock.unix_timestamp, next_window, repaid_amount)?;
+    match authorization {
+        Authorization::Emergency(window) => {
+            guard.record_action(clock.unix_timestamp, window, repaid_amount)?
+        }
+        Authorization::Scheduled => {
+            guard.record_scheduled_action(clock.unix_timestamp, repaid_amount)?
+        }
+    }
 
     emit!(ActionExecuted {
         guard: guard.key(),
@@ -174,6 +212,7 @@ pub fn execute_action_handler<'info>(
         ltv_before_bps: ltv_before,
         ltv_after_bps: ltv_after,
         slot: clock.slot,
+        action_kind,
     });
     Ok(())
 }
@@ -217,27 +256,13 @@ fn validate_relationships(
     Ok(())
 }
 
-fn validate_freshness(
-    current_slot: u64,
-    last_update_slot: u64,
-    stale: bool,
-    price_status: u8,
-) -> Result<()> {
-    require!(!stale, GuardError::StaleObligation);
-    let elapsed = current_slot
-        .checked_sub(last_update_slot)
-        .ok_or(GuardError::StaleObligation)?;
-    require!(
-        elapsed <= MAX_OBLIGATION_STALENESS_SLOTS,
-        GuardError::StaleObligation
-    );
-    require!(
-        Kamino::oracle_checks_pass(price_status),
-        GuardError::StaleOracle
-    );
-    Ok(())
-}
-
+/// Which grant, if any, permits this call right now.
+///
+/// The two paths share the agent key, the pause and the expiry, and nothing else.
+/// An emergency repay is bounded by a cooldown and an action window; a scheduled one
+/// is bounded by its interval. Keeping the budgets apart is the point: a weekly
+/// payment that consumed a rate-limit slot could leave the guard unable to act on
+/// the crash it exists for.
 fn validate_execution_policy(
     guard: &GuardConfig,
     agent: Pubkey,
@@ -245,10 +270,32 @@ fn validate_execution_policy(
     action_kind: u8,
     amount: u64,
     vault_amount: u64,
-) -> Result<crate::state::WindowState> {
+) -> Result<Authorization> {
     require_keys_eq!(agent, guard.agent, GuardError::UnauthorizedAgent);
     require!(!guard.paused, GuardError::GuardPaused);
     require!(now < guard.expires_at, GuardError::GuardExpired);
+    require!(amount > 0, GuardError::InvalidAmount);
+    require!(
+        action_kind == ACTION_REPAY || action_kind == ACTION_SCHEDULED_REPAY,
+        GuardError::ActionNotAllowed
+    );
+    require!(
+        action_kind & guard.allowed_actions != 0,
+        GuardError::ActionNotAllowed
+    );
+
+    if action_kind == ACTION_SCHEDULED_REPAY {
+        require!(
+            guard.schedule_seconds > 0,
+            GuardError::ScheduleNotConfigured
+        );
+        require!(guard.schedule_due(now)?, GuardError::ScheduleNotDue);
+        require!(
+            amount <= guard.schedule_amount && amount <= vault_amount,
+            GuardError::AmountExceedsLimit
+        );
+        return Ok(Authorization::Scheduled);
+    }
 
     if guard.total_actions > 0 {
         let since_last_action = now
@@ -266,110 +313,10 @@ fn validate_execution_policy(
         GuardError::RateLimitExceeded
     );
     require!(
-        action_kind == ACTION_REPAY && action_kind & guard.allowed_actions != 0,
-        GuardError::ActionNotAllowed
-    );
-    require!(amount > 0, GuardError::InvalidAmount);
-    require!(
         amount <= guard.max_action_amount && amount <= vault_amount,
         GuardError::AmountExceedsLimit
     );
-    Ok(next_window)
-}
-
-fn validate_pre_cpi_health(
-    guard: &GuardConfig,
-    position: &crate::adapter::PositionState,
-    amount: u64,
-) -> Result<u16> {
-    require!(
-        guard.trigger_ltv_bps < position.checked_liquidation_ltv_bps()?,
-        GuardError::InvalidPolicy
-    );
-    let ltv_before = map_math(ltv_bps(
-        position.collateral_value_sf,
-        position.debt_value_sf,
-    ))?;
-    require!(
-        ltv_before >= guard.trigger_ltv_bps,
-        GuardError::TriggerNotMet
-    );
-
-    let requested_repay_value = map_math(adjusted_repay_value(
-        position.debt_borrowed_amount_sf,
-        position.debt_adjusted_market_value_sf,
-        amount,
-    ))?;
-    require!(requested_repay_value > 0, GuardError::ActionWouldNotImprove);
-    let required_repay_value = map_math(repay_value_for_target(
-        position.collateral_value_sf,
-        position.debt_value_sf,
-        guard.target_ltv_bps,
-    ))?;
-    require!(
-        requested_repay_value <= required_repay_value,
-        GuardError::Overcorrection
-    );
-    Ok(ltv_before)
-}
-
-fn validate_post_cpi_health(
-    guard: &GuardConfig,
-    before: &crate::adapter::PositionState,
-    after: &crate::adapter::PositionState,
-    ltv_before: u16,
-) -> Result<u16> {
-    require!(
-        after.collateral_value_sf == before.collateral_value_sf,
-        GuardError::PostCpiInvariant
-    );
-    let borrow_reduction_sf = before
-        .debt_borrowed_amount_sf
-        .checked_sub(after.debt_borrowed_amount_sf)
-        .ok_or(GuardError::PostCpiInvariant)?;
-    require!(borrow_reduction_sf > 0, GuardError::ActionWouldNotImprove);
-    let adjusted_reduction_sf = map_math(adjusted_value_for_borrow_reduction(
-        before.debt_borrowed_amount_sf,
-        before.debt_adjusted_market_value_sf,
-        borrow_reduction_sf,
-    ))?;
-    let debt_after_sf = before
-        .debt_value_sf
-        .checked_sub(adjusted_reduction_sf)
-        .ok_or(GuardError::PostCpiInvariant)?;
-
-    // Improvement is asserted on the exact risk-adjusted debt value, not on the LTV
-    // in basis points. `ltv_bps` clamps to BPS because it returns a `u16`, so an
-    // underwater position — one whose true LTV is above 100%, which is exactly what a
-    // sharp drop produces before liquidators arrive — reads as 10000 both before and
-    // after any repay. A strict comparison on the clamped value can never hold there,
-    // and the guard would refuse to act precisely when the position most needs it.
-    //
-    // With collateral pinned unchanged above, a strict fall in debt value is both
-    // necessary and sufficient for the position to have improved, and it holds at
-    // every magnitude. A repay too small to move the risk-adjusted value fails here,
-    // which is correct: it would spend a rate-limit slot and buy nothing.
-    require!(
-        debt_after_sf < before.debt_value_sf,
-        GuardError::ActionWouldNotImprove
-    );
-
-    let ltv_after = map_math(ltv_bps(after.collateral_value_sf, debt_after_sf))?;
-    // Non-strict: the reported LTV must never get worse, but it is allowed to be
-    // unchanged where the clamp hides a real improvement.
-    require!(
-        ltv_after <= ltv_before,
-        GuardError::ActionWouldNotImprove
-    );
-    require!(
-        ltv_after >= guard.target_ltv_bps,
-        GuardError::Overcorrection
-    );
-    Ok(ltv_after)
-}
-
-fn map_math<T>(result: core::result::Result<T, crate::math::MathError>) -> Result<T> {
-    result.map_err(|_| error!(GuardError::MathOverflow))
+    Ok(Authorization::Emergency(next_window))
 }
 
 #[cfg(test)]
@@ -393,15 +340,29 @@ mod tests {
             window_seconds: 3_600,
             cooldown_seconds: 30,
             allowed_actions: ACTION_REPAY,
+            schedule_seconds: 0,
+            schedule_amount: 0,
             expires_at: 2_000,
             paused: false,
             last_action_at: 900,
             window_started_at: 500,
             actions_in_window: 0,
+            last_scheduled_at: 0,
             total_actions: 1,
             total_repaid: 0,
             bump: 1,
             vault_bump: 1,
+        }
+    }
+
+    /// The same guard with a weekly schedule armed, last run at t=0.
+    fn scheduled_guard(agent: Pubkey) -> GuardConfig {
+        GuardConfig {
+            allowed_actions: ACTION_REPAY | ACTION_SCHEDULED_REPAY,
+            schedule_seconds: 7 * 24 * 60 * 60,
+            schedule_amount: 200,
+            expires_at: i64::MAX,
+            ..guard(agent)
         }
     }
 
@@ -495,6 +456,130 @@ mod tests {
     }
 
     #[test]
+    fn scheduled_repay_rejected_without_the_grant() {
+        let agent = Pubkey::new_unique();
+        // The plain guard permits ACTION_REPAY only.
+        assert!(validate(&guard(agent), agent, 1_000, ACTION_SCHEDULED_REPAY, 100).is_err());
+    }
+
+    #[test]
+    fn scheduled_repay_rejected_before_the_interval() {
+        let agent = Pubkey::new_unique();
+        let config = scheduled_guard(agent);
+        assert!(validate(&config, agent, 100_000, ACTION_SCHEDULED_REPAY, 100).is_err());
+        assert!(validate(&config, agent, 604_800, ACTION_SCHEDULED_REPAY, 100).is_ok());
+    }
+
+    #[test]
+    fn scheduled_repay_is_capped_by_the_schedule_amount() {
+        let agent = Pubkey::new_unique();
+        let config = scheduled_guard(agent);
+        assert!(validate(&config, agent, 604_800, ACTION_SCHEDULED_REPAY, 200).is_ok());
+        assert!(validate(&config, agent, 604_800, ACTION_SCHEDULED_REPAY, 201).is_err());
+    }
+
+    /// The emergency cap is the larger of the two. A scheduled repay must not be
+    /// able to reach it just because the same guard grants both.
+    #[test]
+    fn scheduled_repay_cannot_borrow_the_emergency_cap() {
+        let agent = Pubkey::new_unique();
+        let config = scheduled_guard(agent);
+        assert_eq!(config.max_action_amount, 1_000);
+        assert!(validate(&config, agent, 604_800, ACTION_SCHEDULED_REPAY, 900).is_err());
+        assert!(validate(&config, agent, 604_800, ACTION_REPAY, 900).is_ok());
+    }
+
+    /// The two budgets are independent in both directions: an exhausted emergency
+    /// window must not stop the weekly payment, and a cooldown must not either.
+    #[test]
+    fn a_spent_emergency_budget_does_not_block_the_schedule() {
+        let agent = Pubkey::new_unique();
+        let mut config = scheduled_guard(agent);
+        config.actions_in_window = config.max_actions_per_window;
+        config.window_started_at = 604_000;
+        config.last_action_at = 604_790;
+
+        assert!(validate(&config, agent, 604_800, ACTION_REPAY, 100).is_err());
+        assert!(validate(&config, agent, 604_800, ACTION_SCHEDULED_REPAY, 100).is_ok());
+    }
+
+    #[test]
+    fn scheduled_repay_still_needs_the_agent_and_an_unpaused_guard() {
+        let agent = Pubkey::new_unique();
+        let config = scheduled_guard(agent);
+        assert!(validate(
+            &config,
+            Pubkey::new_unique(),
+            604_800,
+            ACTION_SCHEDULED_REPAY,
+            100
+        )
+        .is_err());
+
+        let mut paused = scheduled_guard(agent);
+        paused.paused = true;
+        assert!(validate(&paused, agent, 604_800, ACTION_SCHEDULED_REPAY, 100).is_err());
+
+        let mut expired = scheduled_guard(agent);
+        expired.expires_at = 604_800;
+        assert!(validate(&expired, agent, 604_800, ACTION_SCHEDULED_REPAY, 100).is_err());
+    }
+
+    /// The point of the whole grant: a healthy position, which the trigger path
+    /// refuses to touch, is exactly what a planned repay is for.
+    #[test]
+    fn a_planned_repay_may_pay_down_a_healthy_position() {
+        let agent = Pubkey::new_unique();
+        let config = guard(agent);
+        let healthy = position(1_000, 700);
+
+        assert!(validate_pre_cpi_health(&config, &healthy, 10, RepayMode::Trigger).is_err());
+        assert!(validate_pre_cpi_health(&config, &healthy, 10, RepayMode::Planned).is_ok());
+    }
+
+    /// And it may take the position below the target, which for the trigger path is
+    /// an overcorrection and here is the intended result.
+    #[test]
+    fn a_planned_repay_may_go_past_the_target() {
+        let agent = Pubkey::new_unique();
+        let config = guard(agent);
+        let scale = crate::math::FRACTIONAL_BITS;
+
+        let before = crate::adapter::PositionState {
+            collateral_value_sf: 1_000_u128 << scale,
+            debt_value_sf: 800_u128 << scale,
+            debt_borrowed_amount_sf: 800_u128 << scale,
+            debt_adjusted_market_value_sf: 800_u128 << scale,
+            ..position(1_000, 800)
+        };
+        let after = crate::adapter::PositionState {
+            debt_borrowed_amount_sf: 400_u128 << scale,
+            debt_adjusted_market_value_sf: 400_u128 << scale,
+            ..before
+        };
+
+        assert!(
+            validate_post_cpi_health(&config, &before, &after, 8_000, RepayMode::Trigger).is_err()
+        );
+        let ltv_after =
+            validate_post_cpi_health(&config, &before, &after, 8_000, RepayMode::Planned).unwrap();
+        assert_eq!(ltv_after, 4_000);
+        assert!(ltv_after < config.target_ltv_bps);
+    }
+
+    /// Relaxing the LTV window does not relax the invariants. A repay that leaves
+    /// the position no better off is still refused, in both modes.
+    #[test]
+    fn a_planned_repay_still_has_to_improve_the_position() {
+        let agent = Pubkey::new_unique();
+        let config = guard(agent);
+        let before = position(100, 80);
+        assert!(
+            validate_post_cpi_health(&config, &before, &before, 8_000, RepayMode::Planned).is_err()
+        );
+    }
+
+    #[test]
     fn amount_over_limit_rejected() {
         let agent = Pubkey::new_unique();
         assert!(validate(&guard(agent), agent, 1_000, ACTION_REPAY, 1_001).is_err());
@@ -517,10 +602,10 @@ mod tests {
         let config = guard(agent);
         let mut position = position(100, 85);
         position.liquidation_ltv_bps = 255 * 100;
-        assert!(validate_pre_cpi_health(&config, &position, 1).is_err());
+        assert!(validate_pre_cpi_health(&config, &position, 1, RepayMode::Trigger).is_err());
 
         position.liquidation_ltv_bps = 0;
-        assert!(validate_pre_cpi_health(&config, &position, 1).is_err());
+        assert!(validate_pre_cpi_health(&config, &position, 1, RepayMode::Trigger).is_err());
 
         // A refreshed obligation at the very top of the range is still fine.
         position.liquidation_ltv_bps = crate::math::BPS as u16;
@@ -531,14 +616,14 @@ mod tests {
     fn ltv_below_trigger_rejected() {
         let agent = Pubkey::new_unique();
         let config = guard(agent);
-        assert!(validate_pre_cpi_health(&config, &position(1_000, 700), 10).is_err());
+        assert!(validate_pre_cpi_health(&config, &position(1_000, 700), 10, RepayMode::Trigger).is_err());
     }
 
     #[test]
     fn overcorrection_rejected() {
         let agent = Pubkey::new_unique();
         let config = guard(agent);
-        assert!(validate_pre_cpi_health(&config, &position(100, 80), 11).is_err());
+        assert!(validate_pre_cpi_health(&config, &position(100, 80), 11, RepayMode::Trigger).is_err());
     }
 
     /// Regression, found by `repay_never_increases_ltv`.
@@ -566,10 +651,10 @@ mod tests {
             ..before
         };
 
-        let ltv_before = validate_pre_cpi_health(&config, &before, 1).unwrap();
+        let ltv_before = validate_pre_cpi_health(&config, &before, 1, RepayMode::Trigger).unwrap();
         assert_eq!(ltv_before, crate::math::BPS as u16, "clamped, as expected");
 
-        let ltv_after = validate_post_cpi_health(&config, &before, &after, ltv_before)
+        let ltv_after = validate_post_cpi_health(&config, &before, &after, ltv_before, RepayMode::Trigger)
             .expect("a real reduction in debt must be accepted");
         assert_eq!(ltv_after, crate::math::BPS as u16);
     }
@@ -579,7 +664,7 @@ mod tests {
         let agent = Pubkey::new_unique();
         let config = guard(agent);
         let before = position(100, 80);
-        assert!(validate_post_cpi_health(&config, &before, &before, 8_000).is_err());
+        assert!(validate_post_cpi_health(&config, &before, &before, 8_000, RepayMode::Trigger).is_err());
     }
 
     #[test]
@@ -588,7 +673,7 @@ mod tests {
         let config = guard(agent);
         // A transaction may have been signed while unhealthy, but current
         // account data is healthy at execution time and must fail closed.
-        assert!(validate_pre_cpi_health(&config, &position(1_000, 799), 10).is_err());
+        assert!(validate_pre_cpi_health(&config, &position(1_000, 799), 10, RepayMode::Trigger).is_err());
     }
 
     /// Models what KLend does to the obligation on a successful repay: the borrow
@@ -644,7 +729,7 @@ mod tests {
                 ..position(collateral, debt)
             };
 
-            let Ok(ltv_before) = validate_pre_cpi_health(&config, &before, amount) else {
+            let Ok(ltv_before) = validate_pre_cpi_health(&config, &before, amount, RepayMode::Trigger) else {
                 return Ok(());
             };
 
@@ -652,7 +737,7 @@ mod tests {
 
             // Safety and liveness together: the honest outcome must be accepted, and
             // what it is accepted as must be an improvement.
-            let ltv_after = validate_post_cpi_health(&config, &before, &after, ltv_before)
+            let ltv_after = validate_post_cpi_health(&config, &before, &after, ltv_before, RepayMode::Trigger)
                 .map_err(|error| TestCaseError::fail(format!(
                     "an honest repay of {amount} against collateral {collateral}, \
                      debt {debt}, borrow {borrowed} was rejected: {error:?}"

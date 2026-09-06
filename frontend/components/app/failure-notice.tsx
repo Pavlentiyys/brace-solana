@@ -28,8 +28,41 @@ function describe(failure: Failure): { title: string; body: string; detail?: str
         ...copy.insufficient_funds,
         detail: `Needs ${formatAmount(failure.needed, QUOTE_DECIMALS)} ${QUOTE_SYMBOL}, has ${formatAmount(failure.available, QUOTE_DECIMALS)} ${QUOTE_SYMBOL}.`,
       };
+    case "insufficient_sol":
+      return { ...copy.insufficient_sol, detail: failure.detail };
     case "rpc_unavailable":
       return { ...copy.rpc_unavailable, detail: failure.detail };
+    case "rpc_rate_limited":
+      return { ...copy.rpc_rate_limited, detail: failure.detail };
+    case "rpc_invalid_response":
+      return { ...copy.rpc_invalid_response, detail: `${failure.method}${failure.detail ? `: ${failure.detail}` : ""}` };
+    case "rpc_request_failed":
+      return {
+        ...copy.rpc_request_failed,
+        detail: `${failure.method}${failure.code === undefined ? "" : ` (${failure.code})`}${failure.detail ? `: ${failure.detail}` : ""}`,
+      };
+    case "account_not_found":
+      return { ...copy.account_not_found, detail: failure.account };
+    case "invalid_account_data":
+      return { ...copy.invalid_account_data, detail: failure.account ?? failure.detail };
+    case "confirmation_timeout":
+      return { ...copy.confirmation_timeout, detail: failure.signature };
+    case "transaction_simulation_failed":
+      return { ...copy.transaction_simulation_failed, detail: failure.detail };
+    case "transaction_send_failed":
+      return { ...copy.transaction_send_failed, detail: failure.detail };
+    case "transaction_failed":
+      return { ...copy.transaction_failed, detail: failure.detail };
+    case "invalid_amount":
+      return { ...copy.invalid_amount, detail: failure.detail };
+    case "position_not_found":
+      return { ...copy.position_not_found, detail: failure.detail };
+    case "reserve_not_found":
+      return { ...copy.reserve_not_found, detail: failure.detail };
+    case "guard_not_found":
+      return { ...copy.guard_not_found, detail: failure.detail };
+    case "guard_current":
+      return { ...copy.guard_current, detail: failure.detail };
     case "program_error": {
       const error = describeGuardError(failure.code);
       return {
@@ -55,8 +88,12 @@ function describe(failure: Failure): { title: string; body: string; detail?: str
  */
 function toneOf(failure: Failure): "warn" | "danger" {
   return failure.kind === "wallet_rejected" ||
+    failure.kind === "wallet_locked" ||
+    failure.kind === "wallet_busy" ||
+    failure.kind === "wallet_disconnected" ||
     failure.kind === "program_not_deployed" ||
-    failure.kind === "guard_exists"
+    failure.kind === "guard_exists" ||
+    failure.kind === "confirmation_timeout"
     ? "warn"
     : "danger";
 }

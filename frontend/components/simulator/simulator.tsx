@@ -225,19 +225,26 @@ export function Simulator() {
               </div>
             </dl>
 
+            {/* The v2 badge on the top-up row carries the caveat. The paragraph
+                that used to explain it here spent 34 words on a question nobody
+                had asked yet. */}
             <p className="mt-4 text-[12px] leading-relaxed text-ink-faint">
-              {en.simulator.v2Note}
-            </p>
-
-            <p className="mt-3 text-[12px] leading-relaxed text-ink-faint">
-              The rule is fixed here because you set yours in the chat, not in a form. The
-              position is yours to change.
+              The rule is fixed. The position is yours to change.
             </p>
           </div>
-
-          <Outcome result={result} />
         </div>
       </div>
+
+      {/*
+        The outcome sits under the chart, not beside it.
+
+        In the sidebar it made the right column 951px tall against a 470px
+        chart, so the grid stretched the chart's cell and left 457px of nothing
+        underneath: half the section was a hole. Full width also gives the
+        comparison the horizontal room it never had at 360px, which is why its
+        figures had to be shrunk to whole dollars to fit.
+      */}
+      <Outcome result={result} />
 
       <DataTable result={result} stepMinutes={scenario.stepMinutes} />
 

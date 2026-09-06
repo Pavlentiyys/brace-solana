@@ -68,6 +68,13 @@ test("a deposit with no amount is refused; a withdrawal without one means everyt
   assert.deepEqual(parseAction("withdraw", { tokens: 25 }), { kind: "withdraw", tokens: 25 });
 });
 
+test("an immediate repayment opens the owner flow instead of becoming a rule", () => {
+  assert.deepEqual(parseAction("repay_now", { triggerPercent: 51, targetPercent: 43 }), {
+    kind: "repay_now",
+  });
+  assert.match(describeAction({ kind: "repay_now" }, "USDC"), /one-time repayment flow/);
+});
+
 test("the argumentless actions carry nothing a model could get wrong", () => {
   for (const kind of ["pause", "resume", "revoke"] as const) {
     assert.deepEqual(parseAction(kind, { amount: 999, destination: "somewhere" }), { kind });

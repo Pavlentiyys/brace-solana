@@ -82,7 +82,11 @@ export function ThreadList({
                   onClick={() => onDelete(thread.id)}
                   aria-label={`${en.app.chat.deleteChat}: ${thread.title}`}
                   title={en.app.chat.deleteChat}
-                  className="shrink-0 rounded px-1 text-[14px] leading-none text-ink-faint transition-colors duration-300 hover:text-state-danger"
+                  // Revealed on hover and on keyboard focus, not always on. A
+                  // permanent glyph next to every title invites the accidental
+                  // click it is hardest to recover from, and the keyboard path
+                  // has to stay open regardless of the pointer.
+                  className="shrink-0 rounded px-1 text-[14px] leading-none text-ink-faint opacity-0 transition-all duration-300 hover:text-state-danger focus-visible:opacity-100 group-hover:opacity-100"
                 >
                   ×
                 </button>

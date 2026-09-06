@@ -36,20 +36,32 @@ export const MAX_DELEGATION_SECONDS = 90 * 24 * 60 * 60;
 /**
  * `state.rs::ACTION_*`. A bitmask, one bit per permitted action.
  *
- * `TOP_UP` exists in the mask and is rejected by `PolicyParams::validate`, so v1
- * repays debt and does nothing else. The authorization screen says so.
+ * `TOP_UP` exists in the mask and is rejected by `PolicyParams::validate`, so the
+ * program moves money towards the debt and never towards the collateral.
+ *
+ * `SCHEDULED_REPAY` is a separate grant rather than a setting on `REPAY`, and the
+ * authorization screen has to present it that way. `REPAY` lets the agent spend the
+ * reserve on a position that has reached the trigger; this one lets it spend on a
+ * healthy position, on the interval the owner set.
  */
 export const ACTION_REPAY = 1 << 0;
 export const ACTION_TOP_UP = 1 << 1;
+export const ACTION_SCHEDULED_REPAY = 1 << 2;
 
-/** The only mask `PolicyParams::validate` accepts today. */
+/** Emergency repay only: the mask a policy with no schedule carries. */
 export const ALLOWED_ACTIONS_V1 = ACTION_REPAY;
+/** Emergency repay plus a schedule. The only other mask the program accepts. */
+export const ALLOWED_ACTIONS_SCHEDULED = ACTION_REPAY | ACTION_SCHEDULED_REPAY;
 
-export type ActionKind = "repay" | "top_up";
+/** `state.rs::MIN_SCHEDULE_SECONDS`. */
+export const MIN_SCHEDULE_SECONDS = 60 * 60;
+
+export type ActionKind = "repay" | "top_up" | "scheduled_repay";
 
 export const ACTION_BITS: Record<ActionKind, number> = {
   repay: ACTION_REPAY,
   top_up: ACTION_TOP_UP,
+  scheduled_repay: ACTION_SCHEDULED_REPAY,
 };
 
 /** Actions the deployed program will accept, decoded from a policy's mask. */
@@ -71,6 +83,8 @@ export const DISCRIMINATORS = {
   update_policy: [212, 245, 246, 7, 163, 151, 18, 57],
   revoke: [170, 23, 31, 34, 133, 173, 93, 242],
   execute_action: [246, 137, 105, 113, 247, 6, 223, 174],
+  owner_repay: [205, 18, 148, 210, 27, 12, 229, 49],
+  migrate_guard: [175, 134, 32, 40, 68, 232, 134, 180],
 } as const satisfies Record<string, readonly number[]>;
 
 export type InstructionName = keyof typeof DISCRIMINATORS;
@@ -109,6 +123,9 @@ export const GUARD_ERRORS = [
   { name: "InvalidAmount", cause: "The amount has to be greater than zero." },
   { name: "ClockMovedBackwards", cause: "The chain clock moved backwards relative to the guard." },
   { name: "PostCpiInvariant", cause: "A safety check after the repay failed, so the whole transaction was rolled back." },
+  { name: "ScheduleNotDue", cause: "The next scheduled payment is not due yet." },
+  { name: "ScheduleNotConfigured", cause: "Your rule does not include a payment schedule." },
+  { name: "UnauthorizedOwner", cause: "That repay has to be signed by the wallet that owns the position." },
 ] as const;
 
 export const ANCHOR_ERROR_BASE = 6000;

@@ -31,6 +31,16 @@ export interface DiscoveredPosition {
   unsupportedReason?: string;
   /** The guard for this position, or null when there is no authorization yet. */
   guard: Guard | null;
+  /**
+   * True when an authorization exists but was written by a previous program and is
+   * shorter than this reader expects.
+   *
+   * `guard` is null in that case, which on its own would read as "no authorization"
+   * and lead the user to grant one at an address that is already occupied. That
+   * transaction fails inside the wallet's simulation and arrives as "unexpected
+   * error", which is the one failure this field exists to prevent.
+   */
+  guardNeedsMigration?: boolean;
 }
 
 export interface Snapshot {
@@ -59,10 +69,28 @@ export interface Snapshot {
 export type Failure =
   | { kind: "wallet_unavailable" }
   | { kind: "wallet_rejected" }
+  | { kind: "wallet_locked" }
+  | { kind: "wallet_busy" }
+  | { kind: "wallet_disconnected" }
   | { kind: "insufficient_funds"; needed: bigint; available: bigint }
+  | { kind: "insufficient_sol"; detail?: string }
   | { kind: "rpc_unavailable"; detail?: string }
+  | { kind: "rpc_rate_limited"; detail?: string }
+  | { kind: "rpc_invalid_response"; method: string; detail?: string }
+  | { kind: "rpc_request_failed"; method: string; code?: number; detail?: string }
+  | { kind: "account_not_found"; account?: string }
+  | { kind: "invalid_account_data"; account?: string; detail?: string }
   | { kind: "price_stale"; publishedAt: number }
   | { kind: "congested"; retryable: true }
+  | { kind: "confirmation_timeout"; signature?: string }
+  | { kind: "transaction_simulation_failed"; detail?: string }
+  | { kind: "transaction_send_failed"; detail?: string }
+  | { kind: "transaction_failed"; detail?: string }
+  | { kind: "invalid_amount"; detail?: string }
+  | { kind: "position_not_found"; detail?: string }
+  | { kind: "reserve_not_found"; detail?: string }
+  | { kind: "guard_not_found"; detail?: string }
+  | { kind: "guard_current"; detail?: string }
   | { kind: "authorization_expired" }
   /**
    * `init_guard` was asked for a position that already has one. Anchor's `init`
@@ -99,4 +127,27 @@ export interface GuardSource {
   setPaused(input: { obligation: string; paused: boolean }): Promise<Outcome>;
   /** One instruction, no arguments, no confirmation step. */
   revoke(input: { obligation: string }): Promise<Outcome>;
+  /**
+   * `owner_repay`. Sends part of the reserve, or all of it, at the debt now.
+   *
+   * `amount` of `null` means everything in the reserve, using the program's own
+   * sentinel rather than a balance read that a deposit could race. The owner signs
+   * it, so it is bounded by the reserve and by nothing in the policy: pause, expiry
+   * and revocation restrict the agent, never the owner's own money.
+   */
+  repayNow(input: { obligation: string; amount: bigint | null }): Promise<Outcome>;
+  /**
+   * Arms or clears the repayment schedule, leaving the rest of the rule alone.
+   *
+   * `update_policy` rewrites the whole record, so this reads the policy that is
+   * already there and re-sends it with the schedule changed. `null` turns the
+   * schedule off, which clears the grant and both numbers together because the
+   * program refuses a policy carrying either half alone.
+   */
+  setSchedule(input: {
+    obligation: string;
+    schedule: { everySeconds: number; amount: bigint } | null;
+  }): Promise<Outcome>;
+  /** `migrate_guard`. Grows a previous-layout authorization so it can be read again. */
+  migrateGuard(input: { obligation: string }): Promise<Outcome>;
 }

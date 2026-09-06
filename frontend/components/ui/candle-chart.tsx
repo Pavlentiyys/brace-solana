@@ -18,9 +18,9 @@ type Candle = {
 const UP = "var(--color-state-ok)";
 const DOWN = "var(--color-state-danger)";
 const WIDTH = 720;
-const HEIGHT = 360;
+const HEIGHT = 300;
 const AXIS_WIDTH = 58;
-const VOLUME_HEIGHT = 44;
+const VOLUME_HEIGHT = 36;
 const GAP = 10;
 const PLOT_WIDTH = WIDTH - AXIS_WIDTH;
 const PLOT_HEIGHT = HEIGHT - VOLUME_HEIGHT - GAP;
@@ -104,12 +104,24 @@ function priceLabel(value: number): string {
   return money(value);
 }
 
-function dateLabel(timestamp: number): string {
-  return new Date(timestamp).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
+/**
+ * Elapsed time from the first candle, or a date once the series spans days.
+ *
+ * These scenarios run for hours, so formatting every tick as a calendar date
+ * printed the same day six times: an axis row that cost its height and carried
+ * nothing. Hours from the start is what the series actually measures.
+ */
+function axisLabel(timestamp: number, start: number, spanMs: number): string {
+  if (spanMs >= 48 * 3_600_000) {
+    return new Date(timestamp).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      timeZone: "UTC",
+    });
+  }
+
+  const hours = (timestamp - start) / 3_600_000;
+  return hours < 1 && hours > 0 ? `${Math.round(hours * 60)}m` : `${Math.round(hours)}h`;
 }
 
 function percentChange(open: number, close: number): string {
@@ -181,6 +193,9 @@ export function CandleChart({ prices, stepMinutes, risk, className }: CandleChar
   const dateLabels = Array.from({ length: 6 }, (_, index) =>
     view[Math.min(view.length - 1, Math.floor((index * view.length) / 6))],
   );
+  // Measured across the visible window, but labelled from the scenario's own
+  // start, so zooming in still answers "how far into the fall is this".
+  const axisSpanMs = view[view.length - 1].timestamp - view[0].timestamp;
   const totalChange = percentChange(view[0].open, view[view.length - 1].close);
   const totalUp = view[view.length - 1].close >= view[0].open;
 
@@ -332,7 +347,9 @@ export function CandleChart({ prices, stepMinutes, risk, className }: CandleChar
             }}
             role="status"
           >
-            <div className="text-[10px] text-ink-faint">{dateLabel(active.timestamp)}</div>
+            <div className="text-[10px] text-ink-faint">
+              {axisLabel(active.timestamp, candles[0].timestamp, axisSpanMs)}
+            </div>
             <dl className="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
               <dt className="text-ink-faint">Open</dt><dd className="num text-right text-ink">{priceLabel(active.open)}</dd>
               <dt className="text-ink-faint">High</dt><dd className="num text-right text-ink">{priceLabel(active.high)}</dd>
@@ -350,7 +367,7 @@ export function CandleChart({ prices, stepMinutes, risk, className }: CandleChar
       <div className="mt-2 flex justify-between border-t border-line pt-2 pr-[58px]">
         {dateLabels.map((candle, index) => (
           <span key={`${candle.timestamp}-${index}`} className="num text-[10px] text-ink-faint">
-            {dateLabel(candle.timestamp)}
+            {axisLabel(candle.timestamp, candles[0].timestamp, axisSpanMs)}
           </span>
         ))}
       </div>

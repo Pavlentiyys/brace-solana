@@ -12,18 +12,34 @@
  * own.
  */
 
-import { PublicKey, SystemProgram, TransactionInstruction } from "@solana/web3.js";
+import {
+  PublicKey,
+  SystemProgram,
+  SYSVAR_INSTRUCTIONS_PUBKEY,
+  TransactionInstruction,
+} from "@solana/web3.js";
 
 import { PROGRAM_ID, SEED_GUARD, SEED_VAULT } from "@/lib/core/program";
 import {
   depositReserveData,
   initGuardData,
+  migrateGuardData,
+  ownerRepayData,
   revokeData,
   updatePolicyData,
   withdrawReserveData,
 } from "@/lib/core/tx/instructions";
 import type { Policy } from "@/lib/core/policy";
-import { associatedTokenAddress, TOKEN_PROGRAM_ID } from "@/lib/platform/klend-tx";
+import {
+  associatedTokenAddress,
+  KLEND_PROGRAM_ID,
+  marketAuthority,
+  reserveAccounts,
+  TOKEN_PROGRAM_ID,
+} from "@/lib/platform/klend-tx";
+
+/** Required by KLend v2 in the repay account list even when no farm is attached. */
+const FARMS_PROGRAM_ID = new PublicKey("FarmsPZpWu9i7Kky8tPN37rs2TpmMrAZrC7S7vJa91Hr");
 
 export const GUARD_PROGRAM_ID = new PublicKey(PROGRAM_ID);
 
@@ -141,6 +157,58 @@ export function updatePolicyIx(
     rw(guard),
     sig(accounts.owner, false),
     ro(accounts.obligation),
+  ]);
+}
+
+/**
+ * `migrate_guard`. Grows an authorization written by a previous program.
+ *
+ * The owner signs and pays the rent on the bytes the account gains. Nothing about
+ * the authorization changes; it becomes readable again, with the schedule off.
+ */
+export function migrateGuardIx(accounts: GuardAccounts): TransactionInstruction {
+  return instruction(migrateGuardData(), [
+    rw(guardAddress(accounts.owner, accounts.obligation)),
+    sig(accounts.owner),
+    ro(SystemProgram.programId),
+  ]);
+}
+
+/**
+ * `owner_repay`. Sends the reserve at the debt on the owner's own signature.
+ *
+ * The account list is `execute_action`'s with the owner in the signer slot, and the
+ * obligation's deposit reserves trailing as remaining accounts in the order the
+ * obligation itself lists them. The program walks that order and refuses a list that
+ * has been reordered or padded, so it cannot be assembled from a set.
+ *
+ * This instruction must be preceded in the same transaction by a refresh of every
+ * reserve and of the obligation. The program rejects anything staler than two slots,
+ * which is deliberate and is why `planRepayNow` builds the whole transaction rather
+ * than handing back one instruction.
+ */
+export function ownerRepayIx(
+  accounts: GuardAccounts,
+  amount: bigint,
+  depositReserves: PublicKey[],
+): TransactionInstruction {
+  const guard = guardAddress(accounts.owner, accounts.obligation);
+
+  return instruction(ownerRepayData(amount), [
+    rw(guard),
+    rw(vaultAddress(guard)),
+    sig(accounts.owner, false),
+    rw(accounts.obligation),
+    ro(accounts.lendingMarket),
+    rw(accounts.debtReserve),
+    ro(accounts.vaultMint),
+    rw(reserveAccounts(accounts.debtReserve).liquiditySupply),
+    ro(marketAuthority(accounts.lendingMarket)),
+    ro(KLEND_PROGRAM_ID),
+    ro(FARMS_PROGRAM_ID),
+    ro(TOKEN_PROGRAM_ID),
+    ro(SYSVAR_INSTRUCTIONS_PUBKEY),
+    ...depositReserves.map(rw),
   ]);
 }
 

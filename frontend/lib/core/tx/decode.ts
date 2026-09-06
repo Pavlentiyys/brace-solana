@@ -16,8 +16,15 @@ import { GUARD_ACCOUNT_DISCRIMINATOR } from "@/lib/core/program";
 import type { Guard } from "@/lib/core/guard";
 import { encodeBase58 } from "@/lib/core/tx/base58";
 
-/** 8 discriminator + 7 keys + the scalars. Anchor sizes the account at this. */
-export const GUARD_ACCOUNT_SIZE = 294;
+/**
+ * 8 discriminator + 7 keys + the scalars. Anchor sizes the account at this.
+ *
+ * Grew from 294 to 314 with the repayment schedule: `schedule_seconds` (4),
+ * `schedule_amount` (8) and `last_scheduled_at` (8). An account written by the
+ * previous program is shorter than this and is rejected rather than read with the
+ * fields after `allowed_actions` shifted, which is what a length check is for.
+ */
+export const GUARD_ACCOUNT_SIZE = 314;
 
 class Reader {
   private offset = 0;
@@ -80,6 +87,35 @@ export function looksLikeGuardAccount(bytes: Uint8Array): boolean {
   return GUARD_ACCOUNT_DISCRIMINATOR.every((byte, index) => bytes[index] === byte);
 }
 
+/** The account size before the repayment schedule added its three fields. */
+export const PREVIOUS_GUARD_ACCOUNT_SIZE = 294;
+
+/**
+ * A guard the deployed program wrote before the schedule, which cannot be read at
+ * the current offsets and cannot be replaced either, because `init_guard` refuses an
+ * occupied PDA.
+ *
+ * Worth naming rather than treating as a corrupt account. It is a live
+ * authorization over somebody's position; it needs `migrate_guard` and then it works
+ * again. Without this the interface would show "no authorization", offer to create
+ * one, and fail inside the wallet with nothing on screen to explain it.
+ */
+export function needsMigration(bytes: Uint8Array): boolean {
+  return looksLikeGuardAccount(bytes) && bytes.length === PREVIOUS_GUARD_ACCOUNT_SIZE;
+}
+
+/** Owner and obligation, which sit at fixed offsets in both layouts. */
+export function guardIdentity(
+  address: string,
+  bytes: Uint8Array,
+): { address: string; owner: string; obligation: string } {
+  return {
+    address,
+    owner: encodeBase58(bytes.subarray(8, 40)),
+    obligation: encodeBase58(bytes.subarray(72, 104)),
+  };
+}
+
 /**
  * Decodes the account, or throws.
  *
@@ -116,6 +152,8 @@ export function decodeGuardConfig(address: string, bytes: Uint8Array): Guard {
   const windowSeconds = reader.u32();
   const cooldownSeconds = reader.u32();
   const allowedActions = reader.u8();
+  const scheduleSeconds = reader.u32();
+  const scheduleAmount = reader.u64();
   const expiresAt = reader.timestamp();
   const paused = reader.bool();
 
@@ -136,12 +174,15 @@ export function decodeGuardConfig(address: string, bytes: Uint8Array): Guard {
       windowSeconds,
       cooldownSeconds,
       allowedActions,
+      scheduleSeconds,
+      scheduleAmount,
       expiresAt,
     },
     paused,
     lastActionAt: reader.timestamp(),
     windowStartedAt: reader.timestamp(),
     actionsInWindow: reader.u8(),
+    lastScheduledAt: reader.timestamp(),
     totalActions: reader.u32(),
     totalRepaid: reader.u64(),
   };

@@ -22,6 +22,8 @@ export type ChatBlock =
   | { kind: "status" }
   | { kind: "reserve" }
   | { kind: "authorize" }
+  | { kind: "repayNow" }
+  | { kind: "schedule" }
   | { kind: "history" }
   | { kind: "connect" }
   | { kind: "failure"; failure: Failure }
@@ -196,6 +198,18 @@ export function reply(input: string, context: ChatContext): BotReply {
 
     case "reserve":
       return { blocks: [{ kind: "reserve" }], suggestions: ["status", "history"] };
+
+    case "repay":
+      return {
+        blocks: [...cannotActYet(context), { kind: "repayNow" }],
+        suggestions: ["status", "schedule", "reserve"],
+      };
+
+    case "schedule":
+      return {
+        blocks: [...cannotActYet(context), { kind: "schedule" }],
+        suggestions: ["status", "repay", "reserve"],
+      };
 
     case "authorize":
       return {

@@ -65,7 +65,7 @@ export function SiteFooter() {
           </div>
 
           <FooterColumn title={en.footer.docs}>
-            <FooterItem label={en.footer.app} href="/app" />
+            <FooterItem label={en.footer.app} href="/chat" />
             <FooterItem label={en.docs.title} href="/docs" />
             <FooterItem label={en.footer.exit} href="/docs/exit" />
           </FooterColumn>

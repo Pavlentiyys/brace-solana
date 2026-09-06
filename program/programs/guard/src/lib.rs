@@ -44,4 +44,17 @@ pub mod guard {
     ) -> Result<()> {
         execute_action_handler(ctx, action_kind, amount)
     }
+
+    /// Grows a guard written before the repayment schedule to the current layout.
+    pub fn migrate_guard(ctx: Context<MigrateGuard>) -> Result<()> {
+        migrate_guard_handler(ctx)
+    }
+
+    /// Repay from the reserve on the owner's own signature. `u64::MAX` means all of it.
+    pub fn owner_repay<'info>(
+        ctx: Context<'_, '_, '_, 'info, OwnerRepay<'info>>,
+        amount: u64,
+    ) -> Result<()> {
+        owner_repay_handler(ctx, amount)
+    }
 }

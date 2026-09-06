@@ -42,8 +42,12 @@ function encodeAccount(): Uint8Array {
   offset += 4;
   view.setUint32(offset, 300, true);
   offset += 4;
-  view.setUint8(offset, 1);
+  view.setUint8(offset, 5);
   offset += 1;
+  view.setUint32(offset, 604_800, true);
+  offset += 4;
+  view.setBigUint64(offset, 25_000_000n, true);
+  offset += 8;
   view.setBigInt64(offset, 1_700_000_000n, true);
   offset += 8;
   view.setUint8(offset, 1);
@@ -54,6 +58,8 @@ function encodeAccount(): Uint8Array {
   offset += 8;
   view.setUint8(offset, 2);
   offset += 1;
+  view.setBigInt64(offset, 1_699_980_000n, true);
+  offset += 8;
   view.setUint32(offset, 11, true);
   offset += 4;
   view.setBigUint64(offset, 4_321_000_000n, true);
@@ -85,7 +91,9 @@ test("every field decodes at the offset the program wrote it to", () => {
     maxActionsPerWindow: 3,
     windowSeconds: 86_400,
     cooldownSeconds: 300,
-    allowedActions: 1,
+    allowedActions: 5,
+    scheduleSeconds: 604_800,
+    scheduleAmount: 25_000_000n,
     expiresAt: 1_700_000_000,
   });
 
@@ -93,6 +101,7 @@ test("every field decodes at the offset the program wrote it to", () => {
   assert.equal(guard.lastActionAt, 1_699_999_000);
   assert.equal(guard.windowStartedAt, 1_699_990_000);
   assert.equal(guard.actionsInWindow, 2);
+  assert.equal(guard.lastScheduledAt, 1_699_980_000);
   assert.equal(guard.totalActions, 11);
   assert.equal(guard.totalRepaid, 4_321_000_000n);
 });
@@ -107,6 +116,6 @@ test("somebody else's account is refused rather than read as plausible numbers",
 test("a short buffer is refused, because a shorter account means a newer program", () => {
   assert.throws(
     () => decodeGuardConfig("GuardPda", encodeAccount().subarray(0, GUARD_ACCOUNT_SIZE - 1)),
-    /should be 294 bytes/,
+    /should be 314 bytes/,
   );
 });

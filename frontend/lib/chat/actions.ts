@@ -23,6 +23,7 @@ import { QUOTE_DECIMALS } from "@/lib/core/units";
 
 export type ActionKind =
   | "set_rule"
+  | "repay_now"
   | "pause"
   | "resume"
   | "revoke"
@@ -44,6 +45,11 @@ export interface SetRuleAction {
   days?: number;
 }
 
+/** A request to open the owner-signed one-off repayment flow. */
+export interface RepayNowAction {
+  kind: "repay_now";
+}
+
 export type ProposedAction =
   | SetRuleAction
   | { kind: "pause" }
@@ -52,6 +58,8 @@ export type ProposedAction =
   | { kind: "deposit"; tokens: number }
   /** `null` means the whole reserve. */
   | { kind: "withdraw"; tokens: number | null };
+
+export type ParsedAction = ProposedAction | RepayNowAction;
 
 /**
  * The declaration the model is given, in the shape Gemini's function calling wants.
@@ -91,6 +99,12 @@ export const ACTION_SCHEMA = [
       },
       required: ["triggerPercent", "targetPercent"],
     },
+  },
+  {
+    name: "repay_now",
+    description:
+      "Open the one-time owner repayment flow when the user asks to repay now, repay at the current LTV, or make an immediate repayment. This is not a rule change: do not call set_rule for an immediate repayment.",
+    parameters: { type: "object", properties: {} },
   },
   {
     name: "pause",
@@ -140,11 +154,13 @@ function positive(value: unknown): number | undefined {
  * Deliberately strict. A malformed call is dropped rather than repaired, because a
  * "repaired" rule is one nobody asked for, and the user would be signing it.
  */
-export function parseAction(name: unknown, args: unknown): ProposedAction | null {
+export function parseAction(name: unknown, args: unknown): ParsedAction | null {
   if (typeof name !== "string" || !KINDS.has(name)) return null;
   const input = (typeof args === "object" && args !== null ? args : {}) as Record<string, unknown>;
 
   switch (name) {
+    case "repay_now":
+      return { kind: "repay_now" };
     case "pause":
     case "resume":
     case "revoke":
@@ -237,8 +253,10 @@ export function checkRule(
 }
 
 /** One line describing what pressing confirm will do. Shown before any wallet opens. */
-export function describeAction(action: ProposedAction, symbol: string): string {
+export function describeAction(action: ParsedAction, symbol: string): string {
   switch (action.kind) {
+    case "repay_now":
+      return "Open the one-time repayment flow using the current position and reserve values.";
     case "set_rule":
       return `Repay from the reserve whenever LTV reaches ${action.triggerPercent}%, bringing it back to ${action.targetPercent}%.`;
     case "pause":

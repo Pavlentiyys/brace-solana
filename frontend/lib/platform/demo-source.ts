@@ -24,7 +24,7 @@
 
 import { positionLtvBps, repayValueToTarget, type PositionSnapshot } from "@/lib/core/position";
 import { authorityIsLive, cooldownRemaining, windowUsage, type Guard } from "@/lib/core/guard";
-import { validatePolicy } from "@/lib/core/policy";
+import { hasSchedule, nextScheduledAt, validatePolicy, withSchedule } from "@/lib/core/policy";
 import type { Receipt } from "@/lib/core/receipts";
 import { quote } from "@/lib/core/units";
 import { guardErrorCode } from "@/lib/core/program";
@@ -190,25 +190,70 @@ function advance(target: number): void {
     }
 
     if (!watcherRunning) continue;
-    maybeAct(tick);
+    // Emergency first, and one action per tick. The program would allow both in the
+    // same second — the budgets are separate — but the watcher does one thing at a
+    // time and this world is a model of the watcher.
+    if (!maybeAct(tick)) maybeRunSchedule(tick);
   }
 }
 
-function maybeAct(tick: number): void {
+/**
+ * The scheduled payment, when its interval has elapsed.
+ *
+ * No trigger and no target arithmetic: the amount is the one the owner set, and the
+ * only thing that shrinks it is a reserve that cannot cover it. That is the whole
+ * difference from `maybeAct`, and it is why the position it acts on is usually a
+ * healthy one.
+ */
+function maybeRunSchedule(tick: number): void {
   const guard = world.guard;
   if (!guard || !authorityIsLive(guard, tick)) return;
-  if (cooldownRemaining(guard, tick) > 0) return;
-  if (windowUsage(guard, tick).exhausted) return;
+  if (!hasSchedule(guard.policy)) return;
+
+  const due = nextScheduledAt(guard);
+  if (due === null || tick < due) return;
   if (world.reserveBalance <= 0n) return;
+
+  const amount =
+    guard.policy.scheduleAmount < world.reserveBalance
+      ? guard.policy.scheduleAmount
+      : world.reserveBalance;
+  if (amount <= 0n) return;
+
+  const before = positionLtvBps(positionAt(world));
+  world.debtValue -= amount;
+  world.reserveBalance -= amount;
+  const after = positionLtvBps(positionAt(world));
+
+  world.guard = {
+    ...guard,
+    // Its own clock, and only its own. The emergency cooldown and the action window
+    // are untouched, exactly as `record_scheduled_action` leaves them.
+    lastScheduledAt: tick,
+    totalActions: guard.totalActions + 1,
+    totalRepaid: guard.totalRepaid + amount,
+  };
+  world.receipts.push(
+    receipt(world, { kind: "scheduled_repay", amount, ltvBpsBefore: before, ltvBpsAfter: after }),
+  );
+}
+
+/** Returns whether the agent acted, so the caller knows the tick is spent. */
+function maybeAct(tick: number): boolean {
+  const guard = world.guard;
+  if (!guard || !authorityIsLive(guard, tick)) return false;
+  if (cooldownRemaining(guard, tick) > 0) return false;
+  if (windowUsage(guard, tick).exhausted) return false;
+  if (world.reserveBalance <= 0n) return false;
 
   const position = positionAt(world);
   const ltv = positionLtvBps(position);
-  if (ltv < guard.policy.triggerLtvBps) return;
+  if (ltv < guard.policy.triggerLtvBps) return false;
 
   const wanted = repayValueToTarget(position, guard.policy.targetLtvBps);
   const amount = [wanted, guard.policy.maxActionAmount, world.reserveBalance]
     .reduce((least, candidate) => (candidate < least ? candidate : least));
-  if (amount <= 0n) return;
+  if (amount <= 0n) return false;
 
   if (world.faults.has("action_fails")) {
     // The watcher tried and the transaction did not land. The cooldown still burns,
@@ -225,7 +270,7 @@ function maybeAct(tick: number): void {
           "The obligation was refreshed by somebody else in the same slot, so the repay was rejected and rolled back.",
       }),
     );
-    return;
+    return true;
   }
 
   world.debtValue -= amount;
@@ -244,6 +289,7 @@ function maybeAct(tick: number): void {
   world.receipts.push(
     receipt(world, { kind: "action_executed", amount, ltvBpsBefore: ltv, ltvBpsAfter: after }),
   );
+  return true;
 }
 
 function currentPositions(): DiscoveredPosition[] {
@@ -317,6 +363,9 @@ export const demoSource: GuardSource = {
       policy,
       paused: false,
       lastActionAt: 0,
+      // Matches `init_guard`: the schedule's clock starts now, so the first
+      // payment is one interval away rather than immediately due.
+      lastScheduledAt: world.clock,
       windowStartedAt: world.clock,
       actionsInWindow: 0,
       totalActions: 0,
@@ -371,11 +420,88 @@ export const demoSource: GuardSource = {
     advance(nowSeconds());
     const blocked = writeFault();
     if (blocked) return blocked;
-    if (!world.guard) return { ok: false, failure: { kind: "unknown", detail: "no guard" } };
+    if (!world.guard) return { ok: false, failure: { kind: "guard_not_found", detail: "No authorization on that position." } };
 
     world.guard = { ...world.guard, paused };
     world.receipts.push(receipt(world, { kind: paused ? "paused" : "resumed" }));
     return { ok: true, signature: null };
+  },
+
+  /**
+   * `owner_repay`. Bounded by the reserve and by nothing else.
+   *
+   * Sits beside `withdraw` rather than beside the agent's paths, and shares its
+   * reasoning: pause, expiry and revocation restrict the agent, and the owner
+   * spending their own reserve on their own debt is not the agent acting.
+   */
+  async repayNow({ amount }): Promise<Outcome> {
+    advance(nowSeconds());
+    if (world.faults.has("rpc_unavailable")) {
+      return { ok: false, failure: { kind: "rpc_unavailable" } };
+    }
+
+    const requested = amount ?? world.reserveBalance;
+    if (requested <= 0n || requested > world.reserveBalance) {
+      return {
+        ok: false,
+        failure: { kind: "insufficient_funds", needed: requested, available: world.reserveBalance },
+      };
+    }
+
+    const before = positionLtvBps(positionAt(world));
+    world.debtValue -= requested;
+    world.reserveBalance -= requested;
+    const after = positionLtvBps(positionAt(world));
+
+    if (world.guard) {
+      // Money moved, but no delegation was exercised, so `totalActions` is left
+      // alone. It counts what the agent did while nobody was looking.
+      world.guard = { ...world.guard, totalRepaid: world.guard.totalRepaid + requested };
+    }
+    world.receipts.push(
+      receipt(world, { kind: "owner_repay", amount: requested, ltvBpsBefore: before, ltvBpsAfter: after }),
+    );
+    return { ok: true, signature: null };
+  },
+
+  async setSchedule({ schedule }): Promise<Outcome> {
+    advance(nowSeconds());
+    const blocked = writeFault();
+    if (blocked) return blocked;
+    if (!world.guard) return { ok: false, failure: { kind: "guard_not_found", detail: "No authorization on that position." } };
+
+    const policy = withSchedule(world.guard.policy, schedule);
+    const problems = validatePolicy(policy, {
+      now: world.clock,
+      liquidationLtvBps: LIQUIDATION_LTV_BPS,
+    });
+    if (problems.length > 0) {
+      return {
+        ok: false,
+        failure: { kind: "invalid_policy", messages: problems.map((problem) => problem.message) },
+      };
+    }
+
+    const wasOff = !hasSchedule(world.guard.policy);
+    world.guard = {
+      ...world.guard,
+      policy,
+      // Arming starts the clock now, matching `update_policy_handler`. Without it a
+      // guard authorized a month ago would count that month as elapsed and pay
+      // immediately.
+      lastScheduledAt: wasOff && schedule !== null ? world.clock : world.guard.lastScheduledAt,
+    };
+    world.receipts.push(receipt(world, { kind: "policy_updated" }));
+    return { ok: true, signature: null };
+  },
+
+  /**
+   * Nothing to migrate. The demo world's guard is created by this file at the
+   * current shape, so there is no previous layout for it to have been written in.
+   * Saying so is better than pretending to do work.
+   */
+  async migrateGuard(): Promise<Outcome> {
+    return { ok: false, failure: { kind: "guard_current", detail: "The demo guard is already current." } };
   },
 
   async revoke(): Promise<Outcome> {
@@ -383,7 +509,7 @@ export const demoSource: GuardSource = {
     if (world.faults.has("rpc_unavailable")) {
       return { ok: false, failure: { kind: "rpc_unavailable" } };
     }
-    if (!world.guard) return { ok: false, failure: { kind: "unknown", detail: "no guard" } };
+    if (!world.guard) return { ok: false, failure: { kind: "guard_not_found", detail: "No authorization on that position." } };
 
     // Exactly what `revoke_handler` does: pause, expire, clear the action mask.
     world.guard = {

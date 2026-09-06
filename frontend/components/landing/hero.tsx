@@ -46,9 +46,9 @@ export function Hero() {
           headline about 530px to work with, and 40px type in 530px runs to
           three lines. Below 1280 the headline gets the full measure instead.
         */}
-        <div className="grid items-center gap-12 xl:grid-cols-[1.1fr_0.9fr] xl:gap-16">
+        <div className="grid items-center gap-12 xl:grid-cols-[1.45fr_0.55fr] xl:gap-16">
           <div>
-            <h1 className="max-w-[32ch] text-[1.875rem] leading-[1.15] tracking-tight text-ink sm:text-[2.25rem] xl:text-[3rem]">
+            <h1 className="max-w-[32ch] text-[1.875rem] leading-[1.15] tracking-tight text-ink sm:text-[2.25rem] xl:text-[2.5rem]">
               {en.hero.headline}
             </h1>
 
@@ -61,17 +61,23 @@ export function Hero() {
             </div>
           </div>
 
-          <div className="rounded-panel border border-line bg-surface">
-            <div className="flex items-baseline justify-between gap-3 border-b border-line px-5 py-3.5">
+          {/*
+            No border and no surface fill. This was the first of five boxed
+            panels down the page, and a bordered card beside the headline reads
+            as a widget rather than as the position the rest of the page argues
+            about. Alignment and one hairline do the same job.
+          */}
+          <div>
+            <div className="flex items-baseline justify-between gap-3 border-b border-line pb-3">
               <span className="text-[12px] text-ink-dim">{en.hero.readout.title}</span>
               <span className="num text-[12px] text-ink-faint">SOL {money(startPrice)}</span>
             </div>
 
             <dl>
-              {rows.map((row, index) => (
+              {rows.map((row) => (
                 <div
                   key={row.label}
-                  className={cnRow(index === rows.length - 1)}
+                  className="flex items-baseline justify-between gap-4 py-2.5"
                 >
                   <dt className="text-[13px] text-ink-dim">{row.label}</dt>
                   <dd className="num text-[13px] text-ink">{row.value}</dd>
@@ -85,6 +91,3 @@ export function Hero() {
   );
 }
 
-function cnRow(last: boolean) {
-  return `flex items-baseline justify-between gap-4 px-5 py-3 ${last ? "" : "border-b border-line"}`;
-}

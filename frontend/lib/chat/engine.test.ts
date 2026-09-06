@@ -57,6 +57,11 @@ test("plain questions reach the right command", () => {
   assert.equal(matchCommand("how much is in the reserve")?.name, "reserve");
 });
 
+test("an immediate repayment request beats the status words around current LTV", () => {
+  assert.equal(matchCommand("repay now at current LTV")?.name, "repay");
+  assert.equal(matchCommand("попросил сейчас погасить при текущем LTV")?.name, "repay");
+});
+
 test("an unrelated sentence is refused rather than rounded to a command", () => {
   // The failure mode being guarded against: sharing one preposition with a command
   // must not be enough to trigger something that moves money.

@@ -82,7 +82,16 @@ export function ConnectGate({ children }: { children: ReactNode }) {
   );
 }
 
-function PositionCard({ entry }: { entry: DiscoveredPosition }) {
+const openClassName =
+  "ml-auto inline-flex min-h-11 items-center rounded-panel border border-line-strong px-4 text-[13px] text-ink transition-colors duration-300 hover:border-accent";
+
+function PositionCard({
+  entry,
+  onOpen,
+}: {
+  entry: DiscoveredPosition;
+  onOpen?: (obligation: string) => void;
+}) {
   const { select } = usePlatform();
   const { position, supported, guard } = entry;
   const ltv = positionLtvBps(position);
@@ -130,13 +139,31 @@ function PositionCard({ entry }: { entry: DiscoveredPosition }) {
           <span className="text-[12px] text-ink-dim">
             {guard ? en.app.discovery.guarded : en.app.discovery.notGuarded}
           </span>
-          <Link
-            href={guard ? "/app" : "/app/authorize"}
-            onClick={() => select(position.obligation)}
-            className="ml-auto inline-flex min-h-11 items-center rounded-panel border border-line-strong px-4 text-[13px] text-ink transition-colors duration-300 hover:border-accent"
-          >
-            {guard ? en.app.discovery.open : en.app.discovery.authorize}
-          </Link>
+          {/* "Open" used to be a link to `/chat`, which is where this list is
+              already rendered, so the click selected the position and then
+              navigated nowhere. The panel is a message now, so opening a
+              position means answering with it. The link stays for the callers
+              that are not the conversation. */}
+          {guard && onOpen ? (
+            <button
+              type="button"
+              onClick={() => {
+                select(position.obligation);
+                onOpen(position.obligation);
+              }}
+              className={openClassName}
+            >
+              {en.app.discovery.open}
+            </button>
+          ) : (
+            <Link
+              href={guard ? "/chat" : "/chat/authorize"}
+              onClick={() => select(position.obligation)}
+              className={openClassName}
+            >
+              {guard ? en.app.discovery.open : en.app.discovery.authorize}
+            </Link>
+          )}
         </div>
       ) : (
         <div className="border-t border-line pt-4">
@@ -151,7 +178,7 @@ function PositionCard({ entry }: { entry: DiscoveredPosition }) {
 }
 
 /** The list of borrows, with every state it can be in. */
-export function PositionList() {
+export function PositionList({ onOpen }: { onOpen?: (obligation: string) => void }) {
   const { snapshot, failure, isLoading } = useSnapshot();
 
   if (failure) return <FailureNotice failure={failure} />;
@@ -181,7 +208,7 @@ export function PositionList() {
   return (
     <div className="flex flex-col gap-4">
       {snapshot.positions.map((entry) => (
-        <PositionCard key={entry.position.obligation} entry={entry} />
+        <PositionCard key={entry.position.obligation} entry={entry} onOpen={onOpen} />
       ))}
     </div>
   );
