@@ -51,7 +51,12 @@ export function ActionProposal({ action }: { action: ProposedAction }) {
   const run = useGuardAction(async (guardSource) => {
     switch (action.kind) {
       case "set_rule":
-        return guardSource.authorize({ obligation, policy: checked!.policy });
+        // The same proposal means two different instructions depending on
+        // whether a guard exists. A second `init_guard` on an occupied PDA fails
+        // inside the wallet with nothing on screen to explain it.
+        return entry?.guard
+          ? guardSource.updatePolicy({ obligation, policy: checked!.policy })
+          : guardSource.authorize({ obligation, policy: checked!.policy });
       case "pause":
         return guardSource.setPaused({ obligation, paused: true });
       case "resume":

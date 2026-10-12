@@ -117,7 +117,13 @@ export async function POST(request: Request) {
 
   const payer = faucetKeypair();
   if (payer === null) {
-    return json({ error: "The devnet bUSDC faucet is not configured." }, 503);
+    return json(
+      {
+        error:
+          "The devnet bUSDC faucet is not configured. Add BRACE_DEVNET_FAUCET_SECRET_KEY as a server-only Vercel environment variable, then redeploy.",
+      },
+      503,
+    );
   }
 
   const mint = new PublicKey(market.debt.mint);

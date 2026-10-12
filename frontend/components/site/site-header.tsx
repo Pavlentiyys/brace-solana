@@ -35,7 +35,11 @@ export function SiteHeader() {
             href="/"
             className="flex shrink-0 items-center gap-2 rounded-panel transition-opacity duration-300 hover:opacity-80"
           >
-            <Wordmark className="flex shrink-0 items-center gap-2" size="large" />
+            {/* Icon only below sm. With the account block back in the header
+                the three zones do not fit at 375px with the word, and "Brace"
+                is the one element the reader can do without: the mark is the
+                brand, and the page title says where they are. */}
+            <Wordmark className="flex shrink-0 items-center gap-2 [&>span]:hidden sm:[&>span]:inline" size="large" />
           </Link>
 
           <nav
@@ -49,13 +53,13 @@ export function SiteHeader() {
               {en.nav.docs}
             </Link>
             <Link
-              href="/chat"
+              href="/app"
               className="whitespace-nowrap rounded-panel text-[13px] text-ink-dim transition-colors duration-300 hover:text-ink"
             >
               {en.nav.app}
             </Link>
             <Link
-              href="/chat/analytics"
+              href="/app/analytics"
               className="whitespace-nowrap rounded-panel text-[13px] text-ink-dim transition-colors duration-300 hover:text-ink"
             >
               {en.nav.analytics}

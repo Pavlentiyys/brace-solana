@@ -207,7 +207,7 @@ export function FaucetScreen() {
         </div>
 
         <div className="mt-5 border-t border-line pt-5">
-          <Link href="/chat/faucet/usdc" className="text-[12px] text-accent underline-offset-4 hover:underline">
+          <Link href="/app/faucet/usdc" className="text-[12px] text-accent underline-offset-4 hover:underline">
             {copy.usdcLink}
           </Link>
         </div>

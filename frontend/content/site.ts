@@ -9,8 +9,8 @@ import { programExplorerUrl, readConfig } from "@/lib/platform/config";
 
 export const site = {
   name: "Brace",
-  /** Used for metadata and OG cards. Set to the real domain before launch. */
-  url: "https://brace.fi",
+  /** Used for metadata and OG cards. The live deployment. */
+  url: "https://brace.best",
   tagline: "The agent executes your rule when your position moves toward liquidation.",
 
   /**

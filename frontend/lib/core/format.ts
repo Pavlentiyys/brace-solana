@@ -60,6 +60,12 @@ const dayMonthYear = new Intl.DateTimeFormat("en-GB", {
   year: "numeric",
 });
 
+const dayMonthYearShort = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
+
 const dayMonthTime = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",
   month: "short",
@@ -77,6 +83,11 @@ const dayMonthTime = new Intl.DateTimeFormat("en-GB", {
  */
 export function calendarDate(unixSeconds: number): string {
   return dayMonthYear.format(unixSeconds * 1_000);
+}
+
+/** "19 Nov 2026". The same date where a column is too narrow for the month. */
+export function calendarDateShort(unixSeconds: number): string {
+  return dayMonthYearShort.format(unixSeconds * 1_000);
 }
 
 /** "19 Nov 2026, 14:03". For receipts, where the time of day matters. */

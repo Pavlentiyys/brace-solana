@@ -196,7 +196,7 @@ function RiskSnapshot() {
       <Card className="min-h-[250px]">
         <CardTitle>Position risk</CardTitle>
         <p className="mt-4 text-[13px] leading-relaxed text-ink-dim">The position snapshot could not be read. Open Chat for the full failure detail and retry path.</p>
-        <Link href="/chat" className="mt-4 inline-block text-[13px] text-accent underline-offset-4 hover:underline">Open Chat</Link>
+        <Link href="/app" className="mt-4 inline-block text-[13px] text-accent underline-offset-4 hover:underline">Open the app</Link>
       </Card>
     );
   }
@@ -210,7 +210,7 @@ function RiskSnapshot() {
       <Card className="min-h-[250px]">
         <CardTitle>Position risk</CardTitle>
         <p className="mt-4 text-[14px] leading-relaxed text-ink">No supported borrow is selected yet.</p>
-        <Link href="/chat" className="mt-4 inline-block text-[13px] text-accent underline-offset-4 hover:underline">Open Chat</Link>
+        <Link href="/app" className="mt-4 inline-block text-[13px] text-accent underline-offset-4 hover:underline">Open the app</Link>
       </Card>
     );
   }
@@ -240,7 +240,7 @@ function RiskSnapshot() {
         <div className="flex items-center justify-between gap-3 py-2.5 text-[12px]"><dt className="text-ink-dim">Liquidation</dt><dd className="num text-state-danger">{percentFromBps(position.liquidationLtvBps)} <span className="text-ink-faint">at {money(liquidationPrice)}</span></dd></div>
         <div className="flex items-center justify-between gap-3 py-2.5 text-[12px]"><dt className="text-ink-dim">Reserve</dt><dd className="num text-ink">{formatAmount(snapshot.reserveBalance, QUOTE_DECIMALS)} {QUOTE_SYMBOL}</dd></div>
       </dl>
-      <Link href="/chat" className="mt-4 inline-block text-[13px] text-accent underline-offset-4 hover:underline">Open position in Chat</Link>
+      <Link href="/app" className="mt-4 inline-block text-[13px] text-accent underline-offset-4 hover:underline">Open the position</Link>
     </Card>
   );
 }

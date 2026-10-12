@@ -157,7 +157,7 @@ function PositionCard({
             </button>
           ) : (
             <Link
-              href={guard ? "/chat" : "/chat/authorize"}
+              href={guard ? "/app" : "/app/rule"}
               onClick={() => select(position.obligation)}
               className={openClassName}
             >

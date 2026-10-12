@@ -4,9 +4,10 @@ import Link from "next/link";
 
 import { FailureNotice } from "@/components/app/failure-notice";
 import { LtvReadout } from "@/components/app/ltv-readout";
-import { ActionButton, Card, CardTitle, Note, PageHeading, Row, Rows, StatusDot } from "@/components/app/ui";
+import { ActionButton, Note, PageHeading, StatusDot } from "@/components/app/ui";
+import { cn } from "@/lib/cn";
 import { en } from "@/content/en";
-import { calendarDate, percentFromBps } from "@/lib/core/format";
+import { calendarDateShort, percentFromBps } from "@/lib/core/format";
 import {
   agentReadiness,
   authorityStatus,
@@ -35,8 +36,8 @@ import { DemoControls } from "@/components/app/demo-controls";
  * scrolling past an explanation, because section 7 requires the exit to be one
  * click and an exit you have to hunt for is not one click.
  *
- * The rule itself is read only here. It is set in conversation (3.3) and this screen
- * says so rather than growing a form that would become a second way to set it.
+ * The rule itself is read only here. It has its own page, and a sentence plus a
+ * link is enough on the overview.
  */
 
 const copy = en.app.panel;
@@ -72,149 +73,137 @@ function LivenessLine({ lastCheckAt, now }: { lastCheckAt: number | null; now: n
   );
 }
 
-function AgentCard({
+/** One cell of the metric strip: a label, a number, one line under it. */
+function Stat({
+  label,
+  value,
+  unit,
+  tone,
+  hint,
+  action,
+}: {
+  label: string;
+  value: string;
+  unit?: string;
+  tone?: "ok" | "warn" | "danger";
+  hint?: string;
+  action?: { href: string; label: string };
+}) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1 py-4 sm:px-5 sm:first:pl-0 sm:last:pr-0">
+      <span className="text-[11px] uppercase tracking-[0.08em] text-ink-faint">{label}</span>
+      <span className="flex items-baseline gap-2">
+        {tone ? <StatusDot tone={tone} /> : null}
+        <span className="num truncate text-[17px] text-ink">{value}</span>
+        {unit ? <span className="text-[12px] text-ink-faint">{unit}</span> : null}
+      </span>
+      {hint ? (
+        <span
+          className={cn(
+            "text-[12px] leading-snug",
+            tone === "danger" ? "text-state-danger" : tone === "warn" ? "text-state-warn" : "text-ink-dim",
+          )}
+        >
+          {hint}
+        </span>
+      ) : null}
+      {action ? (
+        <Link href={action.href} className="mt-1 text-[12px] text-accent underline-offset-4 hover:underline">
+          {action.label}
+        </Link>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The state behind the reading, as a strip rather than four cards.
+ *
+ * A card promises that what is inside it is a thing of its own. These four are
+ * one thing, the guard, seen from four sides, and the borders were only
+ * spending space. Hairlines between cells and a single line under each number
+ * say the same at a third of the height.
+ */
+function StatusStrip({
   guard,
   now,
   ltvBps,
   reserveBalance,
+  perAction,
 }: {
   guard: Guard;
   now: number;
   ltvBps: number;
   reserveBalance: bigint;
+  perAction: bigint;
 }) {
   const readiness = agentReadiness(guard, { now, ltvBps, reserveBalance });
-  const tone =
+  const status = authorityStatus(guard, now);
+  const usage = windowUsage(guard, now);
+  const cooldown = cooldownRemaining(guard, now);
+  const left = secondsUntilExpiry(guard, now);
+  const firings = firingsLeft(reserveBalance, perAction);
+  const schedule = nextScheduledAt(guard);
+
+  const agentTone =
     readiness.state === "armed" ? "warn" : readiness.state === "watching" ? "ok" : "danger";
-  const label =
+  const agentLabel =
     readiness.state === "armed"
       ? copy.agent.armed
       : readiness.state === "watching"
         ? copy.agent.watching
         : copy.agent.wouldNotAct;
+  const agentHint = readiness.blockers[0] ? copy.agent.blockers[readiness.blockers[0]] : undefined;
+
+  const authorityHint =
+    status === "revoked"
+      ? copy.authority.revoked
+      : status === "expired"
+        ? copy.authority.expired
+        : status === "paused"
+          ? copy.authority.paused
+          : `${durationLabel(left)} ${copy.authority.left}`;
+  const authorityTone =
+    status === "active" ? (expiryIsNear(guard, now) ? "warn" : undefined) : status === "paused" ? "warn" : "danger";
+
+  const budget =
+    cooldown > 0
+      ? `${copy.authority.cooldown} ${durationLabel(cooldown)}`
+      : schedule !== null
+        ? `${copy.authority.nextPayment} ${durationLabel(Math.max(0, schedule - now))}`
+        : copy.authority.ready;
 
   return (
-    <Card>
-      <CardTitle>{copy.agent.label}</CardTitle>
-      <p className="mt-3 flex items-center gap-2">
-        <StatusDot tone={tone} />
-        <span className="text-[15px] text-ink">{label}</span>
-      </p>
-      <ul className="mt-3 flex flex-col gap-1.5">
-        {readiness.blockers.map((blocker) => (
-          <li key={blocker} className="text-[12px] text-ink-dim">
-            {copy.agent.blockers[blocker]}
-          </li>
-        ))}
-        {readiness.blockers.length === 0 ? (
-          <li className="text-[12px] text-ink-dim">
-            LTV is at or above your trigger and nothing is holding the agent back.
-          </li>
-        ) : null}
-      </ul>
-    </Card>
+    <div className="grid grid-cols-1 divide-y divide-line border-y border-line sm:grid-cols-4 sm:divide-x sm:divide-y-0">
+      <Stat label={copy.agent.label} value={agentLabel} tone={agentTone} hint={agentHint} />
+      <Stat
+        label={copy.reserve.label}
+        value={formatAmount(reserveBalance, QUOTE_DECIMALS)}
+        unit={QUOTE_SYMBOL}
+        tone={reserveBalance <= 0n ? "danger" : undefined}
+        hint={
+          reserveBalance <= 0n
+            ? copy.reserve.emptyShort
+            : `${firings} ${firings === 1 ? copy.reserve.firingsOne : copy.reserve.firings}`
+        }
+        action={{ href: "/app/reserve", label: copy.reserve.manage }}
+      />
+      <Stat
+        label={copy.authority.label}
+        value={calendarDateShort(guard.policy.expiresAt)}
+        tone={authorityTone}
+        hint={authorityHint}
+      />
+      <Stat
+        label={copy.authority.window}
+        value={`${usage.used} / ${usage.limit}`}
+        hint={budget}
+      />
+    </div>
   );
 }
 
-function ReserveCard({
-  guard,
-  reserveBalance,
-  perAction,
-}: {
-  guard: Guard;
-  reserveBalance: bigint;
-  perAction: bigint;
-}) {
-  const firings = firingsLeft(reserveBalance, perAction);
-
-  return (
-    <Card>
-      <CardTitle>{copy.reserve.label}</CardTitle>
-      <p className="num mt-3 text-2xl text-ink">
-        {formatAmount(reserveBalance, QUOTE_DECIMALS)}{" "}
-        <span className="text-[13px] text-ink-faint">{QUOTE_SYMBOL}</span>
-      </p>
-      {reserveBalance <= 0n ? (
-        <p className="mt-2 text-[12px] text-state-danger">{copy.reserve.empty}</p>
-      ) : (
-        <p className="mt-2 text-[12px] text-ink-dim">
-          <span className="num text-ink">{firings}</span>{" "}
-          {firings === 1 ? copy.reserve.firingsOne : copy.reserve.firings}
-        </p>
-      )}
-      <Note className="mt-3">
-        One firing of your rule costs about {formatAmount(perAction, QUOTE_DECIMALS)} {QUOTE_SYMBOL},
-        measured at your {percentFromBps(guard.policy.triggerLtvBps)} trigger.
-      </Note>
-      <Link
-        href="/chat/reserve"
-        className="mt-4 inline-block text-[13px] text-accent underline-offset-4 hover:underline"
-      >
-        {copy.reserve.manage}
-      </Link>
-    </Card>
-  );
-}
-
-function AuthorityCard({ guard, now }: { guard: Guard; now: number }) {
-  const status = authorityStatus(guard, now);
-  const usage = windowUsage(guard, now);
-  const cooldown = cooldownRemaining(guard, now);
-  const left = secondsUntilExpiry(guard, now);
-  const schedule = nextScheduledAt(guard);
-
-  return (
-    <Card>
-      <CardTitle>{copy.authority.label}</CardTitle>
-
-      <p className="mt-3 flex items-baseline gap-2">
-        <span className="text-[15px] text-ink">{copy.authority.expiresOn}</span>
-        <span className="num text-[15px] text-ink">{calendarDate(guard.policy.expiresAt)}</span>
-      </p>
-      <p className="num mt-1 text-[12px] text-ink-faint">
-        {durationLabel(left)} {left > 0 ? copy.authority.left : ""}
-      </p>
-
-      {status === "revoked" ? (
-        <p className="mt-3 text-[12px] text-state-danger">{copy.authority.revoked}</p>
-      ) : status === "expired" ? (
-        <p className="mt-3 text-[12px] text-state-danger">{copy.authority.expired}</p>
-      ) : status === "paused" ? (
-        <p className="mt-3 text-[12px] text-state-warn">{copy.authority.paused}</p>
-      ) : expiryIsNear(guard, now) ? (
-        <p className="mt-3 text-[12px] text-state-warn">{copy.authority.nearExpiry}</p>
-      ) : null}
-
-      <Rows>
-        <Row
-          label={copy.authority.window}
-          value={`${usage.used} / ${usage.limit}`}
-          hint={`${copy.authority.windowResets} ${durationLabel(Math.max(0, usage.resetsAt - now))}`}
-        />
-        <Row
-          label={copy.authority.cooldown}
-          value={cooldown > 0 ? durationLabel(cooldown) : copy.authority.ready}
-        />
-        {/* Only when there is one. A row reading "no schedule" on every panel would
-            be four words of chrome describing the absence of a feature. */}
-        {schedule !== null ? (
-          <Row
-            label={copy.authority.nextPayment}
-            value={`${formatAmount(guard.policy.scheduleAmount, QUOTE_DECIMALS)} ${QUOTE_SYMBOL}`}
-            hint={`${copy.authority.everyLabel} ${durationLabel(guard.policy.scheduleSeconds)}, ${copy.authority.nextIn} ${durationLabel(Math.max(0, schedule - now))}`}
-          />
-        ) : null}
-        <Row label="Actions taken" value={guard.totalActions} />
-        <Row
-          label="Total repaid"
-          value={`${formatAmount(guard.totalRepaid, QUOTE_DECIMALS)} ${QUOTE_SYMBOL}`}
-        />
-      </Rows>
-    </Card>
-  );
-}
-
-function RuleCard({ guard }: { guard: Guard }) {
+function RuleLine({ guard }: { guard: Guard }) {
   const { policy } = guard;
   const sentence = copy.rule.sentence
     .replace("{trigger}", percentFromBps(policy.triggerLtvBps))
@@ -224,14 +213,12 @@ function RuleCard({ guard }: { guard: Guard }) {
     .replace("{window}", durationLabel(policy.windowSeconds));
 
   return (
-    <Card className="md:col-span-2">
-      <CardTitle>{copy.rule.label}</CardTitle>
-      <p className="mt-3 max-w-[70ch] text-[14px] leading-relaxed text-ink">{sentence}</p>
-      <div className="mt-4 flex flex-wrap items-center gap-4">
-        <span className="text-[13px] text-ink-faint">{copy.rule.changeInChat}</span>
-        <Note>{copy.rule.changeNote}</Note>
-      </div>
-    </Card>
+    <p className="max-w-[70ch] text-[13px] leading-relaxed text-ink-dim">
+      {sentence}{" "}
+      <Link href="/app/rule" className="text-accent underline-offset-4 hover:underline">
+        {copy.rule.edit}
+      </Link>
+    </p>
   );
 }
 
@@ -244,18 +231,12 @@ function Controls({ guard, obligation, now }: { guard: Guard; obligation: string
   const withdraw = useGuardAction((source) => source.withdraw({ obligation, amount: null }));
 
   return (
-    <Card>
-      <CardTitle>Controls</CardTitle>
-      {/* One per row, not three across.
-          `ActionButton` sets `whitespace-nowrap`, so in a grid cell narrower than
-          its label the text ran out of the button and over its neighbour. These
-          three labels are sentences rather than verbs, and the panel is often
-          rendered inside a chat message at reading width, so there is no column
-          count that fits them side by side at every size.
-
-          `items-start` keeps each button the width of its own label instead of
-          stretching all three to the card, which would read as a menu. */}
-      <div className="mt-4 flex flex-col items-start gap-2.5">
+    <div>
+      {/* `flex-wrap`, not a grid: a grid cell is allowed to be narrower than
+          its content and these labels are sentences, so three across in a
+          grid ran the text out of one button and over the next. A wrapping
+          row gives each button its own width and drops to a new line instead. */}
+      <div className="flex flex-wrap gap-2.5">
         <ActionButton
           onClick={() => pause.mutate()}
           busy={pause.isPending}
@@ -274,12 +255,10 @@ function Controls({ guard, obligation, now }: { guard: Guard; obligation: string
           {copy.controls.revoke}
         </ActionButton>
       </div>
-      <Note className="mt-3 max-w-[70ch]">{copy.controls.revokeNote}</Note>
-
       <ActionFailure outcome={pause.data} />
       <ActionFailure outcome={withdraw.data} />
       <ActionFailure outcome={revoke.data} />
-    </Card>
+    </div>
   );
 }
 
@@ -303,7 +282,7 @@ export function Panel() {
   const now = snapshot.now;
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-6">
       {/* A dropped request keeps the last numbers on screen and says they are the
           last numbers. Blanking the panel would read as "the position is gone". */}
       {isStale && failure ? <FailureNotice failure={failure} /> : null}
@@ -321,36 +300,26 @@ export function Panel() {
       <LivenessLine lastCheckAt={snapshot.watcherLastCheckAt} now={now} />
 
       {guard === null ? (
-        <Card>
-          <p className="text-[15px] text-ink">{copy.noGuardHeading}</p>
-          <p className="mt-3 max-w-[64ch] text-[13px] leading-relaxed text-ink-dim">
-            {copy.noGuardBody}
-          </p>
+        <div className="flex flex-wrap items-center gap-4 border-y border-line py-4">
+          <p className="text-[13px] text-ink-dim">{copy.noGuardHeading}</p>
           <Link
-            href="/chat/authorize"
-            className="mt-5 inline-flex min-h-11 items-center rounded-panel bg-accent px-5 text-[14px] font-medium text-canvas transition-colors duration-300 hover:bg-accent-deep"
+            href="/app/rule"
+            className="inline-flex min-h-11 items-center rounded-panel bg-accent px-5 text-[14px] font-medium text-canvas transition-colors duration-300 hover:bg-accent-deep"
           >
             {en.app.discovery.authorize}
           </Link>
-        </Card>
+        </div>
       ) : (
         <>
-          <div className="grid gap-4 md:grid-cols-2">
-            <AgentCard
-              guard={guard}
-              now={now}
-              ltvBps={ltvBps}
-              reserveBalance={snapshot.reserveBalance}
-            />
-            <ReserveCard
-              guard={guard}
-              reserveBalance={snapshot.reserveBalance}
-              perAction={minimumForOneAction(position, guard.policy)}
-            />
-            <AuthorityCard guard={guard} now={now} />
-            <Controls guard={guard} obligation={position.obligation} now={now} />
-            <RuleCard guard={guard} />
-          </div>
+          <StatusStrip
+            guard={guard}
+            now={now}
+            ltvBps={ltvBps}
+            reserveBalance={snapshot.reserveBalance}
+            perAction={minimumForOneAction(position, guard.policy)}
+          />
+          <RuleLine guard={guard} />
+          <Controls guard={guard} obligation={position.obligation} now={now} />
         </>
       )}
 

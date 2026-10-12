@@ -31,8 +31,7 @@ npm install
 
 npm run inspect                     # sanity: PDA derivation against live reserves
 npm run market                      # mints, market, two reserves, config
-npx tsx src/seed.ts                 # first price refresh, funds the debt reserve
-npx tsx src/patch-borrow-limit.ts   # opens the debt side to ordinary obligations
+npm run ready                       # prices, liquidity and ordinary-borrow limit
 npx tsx src/open-position.ts 2 100  # faucet, obligation, deposit 2 bSOL, borrow 100 bUSDC
 npx tsx src/mint-to.ts <address> 1 debt # top up test bUSDC for accrued borrow interest
 npx tsx src/refresh.ts <obligation> # recompute the aggregates so the app reads them
@@ -77,7 +76,9 @@ last under full validation.
 **`borrow_limit_outside_elevation_group` is a second cap**, separate from
 `borrow_limit`, and it defaults to zero. An ordinary obligation is in no elevation
 group, so until it is raised every borrow fails with `BorrowLimitExceeded` and a log
-line reading `Left: 0` — that zero is the limit, not the amount.
+line reading `Left: 0` — that zero is the limit, not the amount. `npm run ready`
+sets it for the project market; for an existing market, run
+`npx tsx src/patch-borrow-limit.ts` once with the market-owner keypair.
 
 **`refresh_obligation` wants exactly the reserves the obligation currently
 references**, in order, and rejects a mismatch with `InvalidAccountInput`. A

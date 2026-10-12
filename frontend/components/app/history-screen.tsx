@@ -1,7 +1,7 @@
 "use client";
 
 import { FailureNotice } from "@/components/app/failure-notice";
-import { Card, Note, PageHeading, StatusDot } from "@/components/app/ui";
+import { Card, Note, StatusDot } from "@/components/app/ui";
 import { en } from "@/content/en";
 import { calendarDateTime } from "@/lib/core/format";
 import { describeGuardError } from "@/lib/core/program";
@@ -82,8 +82,8 @@ export function HistoryScreen() {
   const receipts = sortByNewest(snapshot.receipts);
 
   return (
-    <div className="flex max-w-[860px] flex-col gap-8">
-      <PageHeading title={copy.heading} lead={copy.lead} />
+    <div className="flex flex-col gap-6">
+      <Note className="max-w-[70ch]">{copy.lead}</Note>
 
       {receipts.length === 0 ? (
         <Card>

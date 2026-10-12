@@ -181,7 +181,7 @@ yarn install --frozen-lockfile
 yarn dev
 ```
 
-Open `http://localhost:3000` for the landing page or `http://localhost:3000/chat` for the chat interface. The demo wallet and simulator need no credentials and do not submit transactions.
+Open `http://localhost:3000` for the landing page or `http://localhost:3000/app` for the dashboard (the assistant is at `/app/chat`). The demo wallet and simulator need no credentials and do not submit transactions.
 
 Brace defaults to Solana devnet. The public RPC works for light testing; configure a dedicated endpoint for repeated polling:
 
@@ -226,8 +226,7 @@ cd tools/devnet
 npm install
 npm run inspect
 npm run market
-npx tsx src/seed.ts
-npx tsx src/patch-borrow-limit.ts
+npm run ready
 npx tsx src/open-position.ts 2 100
 ```
 

@@ -17,7 +17,7 @@
 export const en = {
   nav: {
     docs: "Docs",
-    app: "Chat",
+    app: "App",
     analytics: "Analytics",
     connect: "Connect wallet",
     skipToContent: "Skip to content",
@@ -189,7 +189,7 @@ export const en = {
   },
 
   footer: {
-    app: "Chat",
+    app: "App",
     docs: "Documentation",
     exit: "How to take everything and leave",
     program: "Program",
@@ -207,11 +207,11 @@ export const en = {
    * nothing claims the position is safe. The panel reports; the user concludes.
    */
   app: {
-    nav: {
-      panel: "Position",
-      analytics: "Analytics",
+    tabs: {
+      position: "Position",
+      rule: "Rule",
+      reserve: "Reserve",
       history: "History",
-      authorize: "Authorization",
     },
     demoBanner: {
       title: "This is a demo",
@@ -243,6 +243,10 @@ export const en = {
       account: "Account",
       send: "Send",
       newChat: "New chat",
+      assistant: "Assistant",
+      notSet: "not set",
+      ruleOnLeft: "The rule editor is on this page, to the left. Set the numbers there and save.",
+      scheduleOnLeft: "The schedule is under the rule editor, to the left.",
       deleteChat: "Delete chat",
       deleted: "Chat deleted",
       undo: "Undo",
@@ -293,7 +297,7 @@ export const en = {
 
     connect: {
       heading: "Connect a wallet",
-      body: "Four things need a signature: authorization, funding the reserve, withdrawing it, and revoking. Everything else happens in the conversation.",
+      body: "Four things need a signature: authorization, funding the reserve, withdrawing it, and revoking. Everything else is a read.",
       unavailable:
         "No Solana wallet is installed in this browser. Install one, then reload this page.",
       connecting: "Waiting for the wallet",
@@ -310,7 +314,7 @@ export const en = {
         "This app is pointed at {cluster}. Your address is the same on every cluster, but balances and anything you sign are not, so set Phantom to {cluster} under Settings, Developer Settings before you authorize.",
       installTitle: "Phantom is not installed in this browser",
       installBody:
-        "Install it and reload this page, or look around the chat first with the demo wallet.",
+        "Install it and reload this page, or look around first with the demo wallet.",
       installCta: "Get Phantom",
       demoFallback: "Continue with the demo wallet",
       demoFallbackNote:
@@ -422,9 +426,10 @@ export const en = {
       },
       reserve: {
         label: "Reserve",
-        firings: "firings left at the current rule",
-        firingsOne: "firing left at the current rule",
+        firings: "firings left",
+        firingsOne: "firing left",
         empty: "Empty. The agent cannot act until you fund it.",
+        emptyShort: "Empty, the agent cannot act",
         manage: "Fund or withdraw",
       },
       authority: {
@@ -447,8 +452,7 @@ export const en = {
         label: "Your rule",
         sentence:
           "When LTV reaches {trigger}, repay from the reserve until LTV is back to {target}, at most {cap} in one action and at most {count} times per {window}.",
-        changeInChat: "Change this in the chat",
-        changeNote: "Rules are set in conversation, not in a form. This screen only shows what is set.",
+        edit: "Change the rule",
       },
       controls: {
         pause: "Pause the agent",
@@ -458,7 +462,7 @@ export const en = {
         revokeNote:
           "One click, no confirmation step. Withdrawing the reserve is not blocked by revoking, expiry or a pause.",
       },
-      noGuardHeading: "No authorization for this position",
+      noGuardHeading: "The agent is reading this position and cannot act on it yet.",
       noGuardBody:
         "The agent is reading this position and can do nothing to it. Granting authorization is the step that changes that, and it is reversible in one click.",
     },
@@ -519,11 +523,57 @@ export const en = {
       done: "Authorization granted.",
       ruleFromChat: "These values come from the rule you set in the chat.",
       ruleFallback:
-        "No rule has arrived from the chat, so these are starting values. Set your rule in the chat first if you want different ones.",
+        "No custom rule has arrived from the chat. These are only preview defaults; they do not determine how much you can borrow. Return to chat and describe your rule before authorizing it.",
     },
+    rule: {
+      pageTitle: "Rule",
+      pageLead: "Every number here is enforced by the program.",
+      createHeading: "Set the rule",
+      createLead: "Signing creates the guard and its vault. Nothing moves until you fund the reserve.",
+      editHeading: "Your rule",
+      editLead: "Change a number and save. The agent reads it on its next check.",
+      trigger: "Act when LTV reaches",
+      triggerNote: "Now {now}. Liquidation at {liquidation}.",
+      target: "Repay back down to",
+      targetNote: "Each action repays only enough to reach this.",
+      atPrice: "SOL at",
+      cap: "Most it may spend per action",
+      capNote: "Hard cap, whatever the LTV.",
+      expiry: "Authorization ends",
+      days: "days",
+      expiryNote: "{max} days at most.",
+      showAdvanced: "Show rate limits",
+      hideAdvanced: "Hide rate limits",
+      actionsPerWindow: "Actions per window",
+      windowHours: "Window, hours",
+      cooldownMinutes: "Cooldown, minutes",
+      advancedNote: "How often the agent may act. Scheduled payments never spend these.",
+      save: "Save the rule",
+      grant: "Grant authorization",
+      unchanged: "Nothing changed yet.",
+      willSign: "One transaction to sign.",
+      saved: "Saved.",
+      grantsSummary: "What this grants, and what it cannot",
+      canHeading: "Can",
+      can: {
+        repay: "Repay part of your debt from your reserve when LTV reaches your trigger",
+        top_up: "Add collateral from your reserve",
+        scheduled_repay: "Make the payment you scheduled, whatever the price is doing",
+      },
+      cannotHeading: "Cannot",
+      cannot: [
+        "Send funds to any other address",
+        "Touch anything except your reserve and this position",
+        "Spend more than the cap per action, or more often than the limits allow",
+        "Act on a healthy position, unless you set a schedule",
+        "Act after you revoke, or after the end date",
+        "Stop you withdrawing the reserve at any time",
+      ],
+    },
+
     repayNow: {
       heading: "Repay now",
-      body: "This one is yours to make, not the agent's. Nothing in the rule applies: the trigger, the target, the cooldown and the action window all exist to bound what somebody else may do with your reserve, and none of them are bounding you.",
+      body: "Your signature, not the agent's. None of the rule's limits apply to you.",
       reserve: "In the reserve",
       debt: "Outstanding debt",
       ltv: "LTV now",
@@ -531,15 +581,15 @@ export const en = {
       repayPart: "Repay this much",
       repayAll: "Repay everything in the reserve",
       overReserve: "That is more than the reserve holds.",
-      note: "Everything means the whole reserve, not the whole debt. Kamino settles a repay at whatever is outstanding, so a reserve larger than the loan clears it and keeps the difference.",
-      needsGuard: "There is no authorization on this position yet, so there is no reserve to spend.",
-      done: "Repaid. The panel will show the new figures on its next read.",
+      note: "Everything means the whole reserve. A reserve larger than the debt clears it and keeps the rest.",
+      needsGuard: "Grant authorization first.",
+      done: "Repaid.",
     },
 
     schedule: {
       heading: "Repay on a schedule",
-      body: "A standing payment: this much, this often, whatever the price is doing. It is the one thing the agent may do to a position that is in no danger at all, so it is a permission rather than a limit and it is granted separately from the rest of the rule.",
-      none: "No schedule. The agent only acts when your position reaches the trigger.",
+      body: "A standing payment, whatever the price is doing. The one thing the agent may do to a healthy position.",
+      none: "No schedule.",
       every: "How often",
       amount: "Amount each time",
       currentEvery: "Runs every",
@@ -554,15 +604,15 @@ export const en = {
       start: "Start the schedule",
       update: "Update the schedule",
       stop: "Stop the schedule",
-      note: "The schedule has its own budget. A scheduled payment never spends the cooldown or the action window the emergency repay depends on, so a routine payment cannot leave the agent unable to act on a crash.",
-      needsGuard: "There is no authorization on this position yet, so there is nothing to schedule.",
-      done: "Saved. The agent reads the new schedule on its next check.",
+      note: "Its own budget: a scheduled payment never spends the emergency cooldown or window.",
+      needsGuard: "Grant authorization first.",
+      done: "Saved.",
     },
 
     reserve: {
       title: "Reserve",
       heading: "The money the agent is allowed to spend",
-      lead: "It stays yours. Withdrawing is not blocked by a paused agent, an expired authorization or a revoked one, and that is a property of the program rather than a policy of ours.",
+      lead: "It stays yours. Withdrawing works while paused, expired or revoked; the program guarantees it.",
       balance: "In the reserve",
       walletBalance: "In your wallet",
       depositHeading: "Add to the reserve",
@@ -595,7 +645,7 @@ export const en = {
     history: {
       title: "History",
       heading: "Every action and every attempt",
-      lead: "Including the ones that failed. An attempt that did not land is the case that matters most, so it is in the list rather than in a log somewhere.",
+      lead: "Every action and every attempt, including the ones that failed.",
       empty: "Nothing has happened to this guard yet.",
       viewTransaction: "Transaction",
       noTransaction: "no transaction, this is demo data",
@@ -725,7 +775,7 @@ export const en = {
     },
     demoControls: {
       heading: "Demo controls",
-      body: "The failure paths are the ones a demo never shows. These switch them on so they can be read on the screen rather than taken on trust.",
+      body: "Switch the failure paths on and watch what the interface does.",
       price: "Move the price",
       down10: "Down 10%",
       down25: "Down 25%",

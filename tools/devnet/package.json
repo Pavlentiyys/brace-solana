@@ -6,6 +6,7 @@
   "description": "Creates a Kamino lending market on devnet that this project controls, so a real borrow can be opened against it.",
   "scripts": {
     "market": "tsx src/create-market.ts",
+    "ready": "tsx src/seed.ts && tsx src/patch-borrow-limit.ts",
     "faucet": "tsx src/mint-to.ts",
     "inspect": "tsx src/inspect.ts"
   },

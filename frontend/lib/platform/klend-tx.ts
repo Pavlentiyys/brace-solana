@@ -4,7 +4,7 @@
  * Reading Kamino needs no library at all — `kamino.ts` decodes accounts by offset
  * over plain JSON-RPC. Writing needs a transaction, and a transaction needs an
  * assembler, so this is the one place `@solana/web3.js` earns its bundle weight. It
- * is imported only by the `/chat` write path.
+ * is imported only by the `/app` write path.
  *
  * There is still no Anchor here. An Anchor instruction is an 8-byte discriminator —
  * `sha256("global:" + snake_case_name)[..8]` — followed by borsh arguments, and every

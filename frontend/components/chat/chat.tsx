@@ -2,21 +2,21 @@
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
-import { AuthorizeScreen } from "@/components/app/authorize-screen";
 import { ConnectGate, PositionList } from "@/components/app/connect";
 import { FailureNotice } from "@/components/app/failure-notice";
 import { HistoryScreen } from "@/components/app/history-screen";
 import { Panel } from "@/components/app/panel";
 import { RepayNow } from "@/components/app/repay-now";
+import { RuleScreen } from "@/components/app/rule-screen";
 import { ReserveScreen } from "@/components/app/reserve-screen";
 import { ScheduleScreen } from "@/components/app/schedule-screen";
 import { OpenPosition } from "@/components/app/open-position";
-import { WalletAccount } from "@/components/site/wallet-button";
 import { ActionProposal } from "@/components/chat/action-proposal";
 import { ThreadList } from "@/components/chat/thread-list";
 import { Note } from "@/components/app/ui";
 import { Bubble, Thinking } from "@/components/chat/message";
 import { en } from "@/content/en";
+import { cn } from "@/lib/cn";
 import { commandByName, matchCommand, type CommandName } from "@/lib/chat/commands";
 import {
   available,
@@ -38,6 +38,7 @@ import {
 } from "@/lib/chat/store";
 import type { ProposedAction, RepayNowAction } from "@/lib/chat/actions";
 import { newId, type Thread } from "@/lib/chat/threads";
+import { percentFromBps } from "@/lib/core/format";
 import { positionLtvBps } from "@/lib/core/position";
 import { usePlatform, useSelectedPosition } from "@/lib/platform/provider";
 
@@ -96,11 +97,48 @@ function useChatContext(): ChatContext {
   }, [status, world, wallet.kind, config.clusterLabel, snapshot, entry, failure, isLoading, source]);
 }
 
+/**
+ * Beside the dashboard the assistant must not answer with the dashboard. The
+ * position is already on screen to the left, so "how is my position" gets the
+ * three numbers as a sentence, and "set up a rule" points at the editor that
+ * is already open rather than opening a second one in a 400px column.
+ */
+function CompactStatus({ context }: { context: ChatContext }) {
+  const rows = [
+    [en.app.panel.ltvLabel, context.ltvBps === null ? null : percentFromBps(context.ltvBps)],
+    [en.app.panel.triggerAt, context.triggerBps === null ? null : percentFromBps(context.triggerBps)],
+    [en.app.panel.liquidationAt, context.liquidationBps === null ? null : percentFromBps(context.liquidationBps)],
+  ] as const;
+
+  return (
+    <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-[13px]">
+      {rows.map(([label, value]) => (
+        <div key={label} className="contents">
+          <dt className="text-ink-dim">{label}</dt>
+          <dd className="num text-ink">{value ?? en.app.chat.notSet}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function AnchorLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <a href={href} className="text-[13px] text-accent underline-offset-4 hover:underline">
+      {children}
+    </a>
+  );
+}
+
 function Block({
   block,
+  context,
+  compact,
   onOpenPosition,
 }: {
   block: ChatBlock;
+  context: ChatContext;
+  compact: boolean;
   onOpenPosition: (obligation: string) => void;
 }) {
   switch (block.kind) {
@@ -115,15 +153,15 @@ function Block({
     case "proposal":
       return <ActionProposal action={block.action} />;
     case "status":
-      return <Panel />;
+      return compact ? <CompactStatus context={context} /> : <Panel />;
     case "reserve":
       return <ReserveScreen />;
     case "repayNow":
       return <RepayNow />;
     case "schedule":
-      return <ScheduleScreen />;
+      return compact ? <AnchorLink href="#rule">{en.app.chat.scheduleOnLeft}</AnchorLink> : <ScheduleScreen />;
     case "authorize":
-      return <AuthorizeScreen />;
+      return compact ? <AnchorLink href="#rule">{en.app.chat.ruleOnLeft}</AnchorLink> : <RuleScreen />;
     case "history":
       return <HistoryScreen />;
     case "failure":
@@ -171,6 +209,7 @@ function Conversation({
   pending,
   onSend,
   onOpenPosition,
+  compact,
 }: {
   thread: Thread;
   context: ChatContext;
@@ -178,6 +217,7 @@ function Conversation({
   pending: boolean;
   onSend: (input: string, opening: ChatMessage) => void;
   onOpenPosition: (obligation: string, opening: ChatMessage) => void;
+  compact: boolean;
 }) {
   const [draft, setDraft] = useState("");
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -243,6 +283,8 @@ function Conversation({
               renderBlock={(block) => (
                 <Block
                   block={block}
+                  context={context}
+                  compact={compact}
                   onOpenPosition={(obligation) => onOpenPosition(obligation, opening)}
                 />
               )}
@@ -287,7 +329,7 @@ function Conversation({
               </button>
             </form>
 
-            <Note>{en.app.chat.note}</Note>
+            {compact ? null : <Note>{en.app.chat.note}</Note>}
           </div>
         </div>
       </div>
@@ -295,7 +337,12 @@ function Conversation({
   );
 }
 
-export function Chat() {
+/**
+ * `compact` is the dashboard's assistant column: one conversation, no thread
+ * rail, a "new chat" control in its header instead. The full-page variant keeps
+ * the rail because there the width is there to spend on it.
+ */
+export function Chat({ compact = false }: { compact?: boolean } = {}) {
   const context = useChatContext();
   const { select } = usePlatform();
   const state = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
@@ -493,22 +540,34 @@ export function Chat() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-6 md:flex-row md:gap-8">
-      <aside className="flex min-h-0 flex-col md:w-[220px] md:shrink-0">
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <ThreadList
-            threads={state.threads}
-            activeId={state.activeId}
-            now={now}
-            onSelect={selectThread}
-            onCreate={startThread}
-            onDelete={remove}
-          />
+    <div className={cn("flex min-h-0 flex-1 flex-col gap-6", !compact && "md:flex-row md:gap-8")}>
+      {compact ? (
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line pb-3">
+          <span className="text-[12px] uppercase tracking-[0.08em] text-ink-faint">
+            {en.app.chat.assistant}
+          </span>
+          <button
+            type="button"
+            onClick={startThread}
+            className="text-[12px] text-ink-dim underline-offset-4 transition-colors duration-300 hover:text-ink hover:underline"
+          >
+            {en.app.chat.newChat}
+          </button>
         </div>
-        <div className="mt-4 shrink-0 border-t border-line pt-4">
-          <WalletAccount />
-        </div>
-      </aside>
+      ) : (
+        <aside className="flex min-h-0 flex-col md:w-[220px] md:shrink-0">
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <ThreadList
+              threads={state.threads}
+              activeId={state.activeId}
+              now={now}
+              onSelect={selectThread}
+              onCreate={startThread}
+              onDelete={remove}
+            />
+          </div>
+        </aside>
+      )}
 
       {undo ? (
         // Fixed to the viewport, not to the composer. The composer grows and
@@ -543,6 +602,7 @@ export function Chat() {
           pending={pending}
           onSend={send}
           onOpenPosition={openPosition}
+          compact={compact}
         />
       </div>
     </div>

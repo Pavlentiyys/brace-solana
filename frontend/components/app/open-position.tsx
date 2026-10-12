@@ -34,6 +34,18 @@ import { WalletCannotSign, WalletRejected } from "@/lib/platform/wallet";
 const COLLATERAL_TOKENS = 2;
 const BORROW_TOKENS = 100;
 
+function openPositionError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/borrow.?limit|left:\s*0|elevation.?group/i.test(message)) {
+    return (
+      "The Brace devnet market is not ready for an ordinary borrow: its " +
+      "borrow_limit_outside_elevation_group is still zero. Run `npm run ready` " +
+      "in tools/devnet with the market-owner keypair, then try again."
+    );
+  }
+  return message;
+}
+
 type Stage = "idle" | "depositing" | "borrowing" | "refreshing" | "done";
 type CloseStage = "idle" | "repaying" | "withdrawing" | "done";
 
@@ -85,6 +97,24 @@ export function OpenPosition() {
         transaction.recentBlockhash = blockhash;
         transaction.feePayer = owner;
 
+        // Simulate before Phantom opens. Without this, a failed borrow can be
+        // reduced to an opaque custom error and the useful KLend log is lost.
+        // The legacy `Transaction` overload takes no config and never verifies
+        // signatures, so there is nothing to switch off here.
+        const simulation = await connection.simulateTransaction(transaction);
+        if (simulation.value.err) {
+          const logs = simulation.value.logs ?? [];
+          const detail = logs.slice(-6).join(" ");
+          if (/borrow.?limit|left:\s*0|elevation.?group/i.test(detail)) {
+            throw new Error(
+              "The Brace devnet market is not ready for an ordinary borrow: its " +
+                "borrow_limit_outside_elevation_group is still zero. Run `npm run ready` " +
+                "in tools/devnet with the market-owner keypair, then try again.",
+            );
+          }
+          throw new Error(`The ${stages[index]} transaction failed simulation.${detail ? ` ${detail}` : ""}`);
+        }
+
         const signature = await wallet.signAndSend(transaction);
         await connection.confirmTransaction(signature, "confirmed");
         sent.push(signature);
@@ -111,7 +141,7 @@ export function OpenPosition() {
       setStage("idle");
       if (caught instanceof WalletRejected) setError(en.app.openPosition.rejected);
       else if (caught instanceof WalletCannotSign) setError(en.app.openPosition.demoWallet);
-      else setError((caught as Error).message);
+      else setError(openPositionError(caught));
     }
   }
 

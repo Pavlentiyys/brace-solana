@@ -40,7 +40,7 @@ export default function GettingStartedPage() {
       </ol>
 
       <div className="mt-10 flex flex-wrap items-center gap-5 border-t border-line pt-8">
-        <ButtonLink href="/chat">{en.start.cta}</ButtonLink>
+        <ButtonLink href="/app">{en.start.cta}</ButtonLink>
         <p className="max-w-[52ch] text-[12px] leading-relaxed text-ink-faint">
           {en.start.ctaNote}
         </p>

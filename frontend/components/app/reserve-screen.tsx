@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { FailureNotice } from "@/components/app/failure-notice";
-import { ActionButton, Card, CardTitle, Note, PageHeading, Row, Rows } from "@/components/app/ui";
+import { ActionButton, Card, CardTitle, Note, Row, Rows } from "@/components/app/ui";
 import { en } from "@/content/en";
 import { percentFromBps } from "@/lib/core/format";
 import { coverage, firingsLeft, furthestCoveredDrop, minimumForOneAction } from "@/lib/core/reserve";
@@ -118,8 +118,8 @@ export function ReserveScreen() {
   const depth = policy ? furthestCoveredDrop(position, policy, reserveBalance) : null;
 
   return (
-    <div className="flex max-w-[860px] flex-col gap-8">
-      <PageHeading title={copy.heading} lead={copy.lead} />
+    <div className="flex flex-col gap-6">
+      <Note className="max-w-[70ch]">{copy.lead}</Note>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Card>

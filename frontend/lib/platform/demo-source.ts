@@ -464,6 +464,37 @@ export const demoSource: GuardSource = {
     return { ok: true, signature: null };
   },
 
+  async updatePolicy({ policy }): Promise<Outcome> {
+    advance(nowSeconds());
+    const blocked = writeFault();
+    if (blocked) return blocked;
+    if (!world.guard) return { ok: false, failure: { kind: "unknown", detail: "no guard" } };
+
+    const problems = validatePolicy(policy, {
+      now: world.clock,
+      liquidationLtvBps: LIQUIDATION_LTV_BPS,
+    });
+    if (problems.length > 0) {
+      return {
+        ok: false,
+        failure: { kind: "invalid_policy", messages: problems.map((problem) => problem.message) },
+      };
+    }
+
+    // Exactly what `update_policy_handler` does with the counters: the window
+    // restarts, and a schedule that was off and is now on starts its clock here.
+    const wasOff = !hasSchedule(world.guard.policy);
+    world.guard = {
+      ...world.guard,
+      policy,
+      windowStartedAt: world.clock,
+      actionsInWindow: 0,
+      lastScheduledAt: wasOff && hasSchedule(policy) ? world.clock : world.guard.lastScheduledAt,
+    };
+    world.receipts.push(receipt(world, { kind: "policy_updated" }));
+    return { ok: true, signature: null };
+  },
+
   async setSchedule({ schedule }): Promise<Outcome> {
     advance(nowSeconds());
     const blocked = writeFault();

@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
-import { Note } from "@/components/app/ui";
+import { Chat } from "@/components/chat/chat";
 import { en } from "@/content/en";
+import { cn } from "@/lib/cn";
 import { demoControls } from "@/lib/platform/demo-source";
 import { usePlatform } from "@/lib/platform/provider";
 
@@ -50,23 +52,69 @@ function DemoBanner() {
   );
 }
 
+/** The four mini pages. Each is one tab; the assistant sits beside all of them. */
+const TABS = [
+  { href: "/app", label: en.app.tabs.position },
+  { href: "/app/rule", label: en.app.tabs.rule },
+  { href: "/app/reserve", label: en.app.tabs.reserve },
+  { href: "/app/history", label: en.app.tabs.history },
+] as const;
+
+function Tabs({ pathname }: { pathname: string }) {
+  return (
+    <nav aria-label="App" className="-mx-5 flex overflow-x-auto border-b border-line px-5 md:mx-0 md:px-0">
+      {TABS.map((tab) => {
+        const active = pathname === tab.href;
+        return (
+          <Link
+            key={tab.href}
+            href={tab.href}
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "-mb-px min-h-11 whitespace-nowrap border-b-2 px-3 pt-2 text-[13px] transition-colors duration-300 first:pl-0",
+              active
+                ? "border-accent text-ink"
+                : "border-transparent text-ink-dim hover:text-ink",
+            )}
+          >
+            {tab.label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
 export function AppFrame({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { status, world } = usePlatform();
+  // The tabbed pages get the assistant beside them. Analytics and the faucets
+  // are full-width tools of their own.
+  const tabbed = TABS.some((tab) => tab.href === pathname);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      {pathname === "/chat/faucet" ? null : <DemoBanner />}
+    <div className="flex flex-1 flex-col">
+      {pathname.startsWith("/app/faucet") ? null : <DemoBanner />}
 
-      {/* `min-h-0` is what lets the conversation own its own scroll: without it
-          this flex child refuses to shrink below its content and the whole page
-          scrolls instead, which is what put the composer on top of the
-          messages. */}
-      <div className="mx-auto flex w-full min-h-0 max-w-[1200px] flex-1 flex-col px-5 py-6 md:px-8 md:py-8">
-        {children}
+      <div className="mx-auto w-full max-w-[1200px] flex-1 px-5 py-6 md:px-8 md:py-8">
+        {tabbed ? (
+          <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-10">
+            <div className="flex min-w-0 flex-col gap-6">
+              <Tabs pathname={pathname} />
+              {children}
+            </div>
+            <aside className="min-w-0 lg:sticky lg:top-24 lg:self-start">
+              <div className="flex h-[70vh] min-h-[460px] flex-col rounded-panel border border-line bg-surface p-4 lg:h-[calc(100vh-8rem)]">
+                <Chat compact />
+              </div>
+            </aside>
+          </div>
+        ) : (
+          children
+        )}
       </div>
 
-      {pathname !== "/chat/faucet" && world === "demo" && status === "connected" ? (
+      {!pathname.startsWith("/app/faucet") && world === "demo" && status === "connected" ? (
         <div className="border-t border-line">
           <div className="mx-auto w-full max-w-[1200px] px-5 py-4 md:px-8">
             <button
@@ -79,9 +127,6 @@ export function AppFrame({ children }: { children: ReactNode }) {
             >
               {en.app.demoBanner.reset}
             </button>
-            <Note className="mt-2 max-w-[70ch]">
-              The demo world lives in this tab and starts over when you reload.
-            </Note>
           </div>
         </div>
       ) : null}

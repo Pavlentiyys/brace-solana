@@ -119,8 +119,13 @@ export interface GuardSource {
 
   snapshot(owner: string): Promise<Snapshot>;
 
-  /** `init_guard`. The one thing that cannot be done in the chat. */
+  /** `init_guard`. Creates the guard, its vault, and the first rule. */
   authorize(input: { obligation: string; policy: Policy }): Promise<Outcome>;
+  /**
+   * `update_policy` with a whole new rule. The pause flag and the agent are kept
+   * as they are; only the numbers the owner edited change.
+   */
+  updatePolicy(input: { obligation: string; policy: Policy }): Promise<Outcome>;
   deposit(input: { obligation: string; amount: bigint }): Promise<Outcome>;
   /** `amount` of `null` withdraws the whole vault, using the program's sentinel. */
   withdraw(input: { obligation: string; amount: bigint | null }): Promise<Outcome>;

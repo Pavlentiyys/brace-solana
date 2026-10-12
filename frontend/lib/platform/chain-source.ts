@@ -486,6 +486,21 @@ export function createChainSource(config: PlatformConfig, signer: Signer | null 
       return send((accounts) => revokeIx(accounts), obligation);
     },
 
+    async updatePolicy({ obligation, policy }) {
+      if (signer === null) return { ok: false, failure: { kind: "wallet_unavailable" } };
+
+      const guards = await fetchGuards(config, signer.address);
+      const guard = guards.find((candidate) => candidate.obligation === obligation);
+      if (!guard) {
+        return { ok: false, failure: { kind: "unknown", detail: "No authorization on that position." } };
+      }
+
+      return send(
+        (accounts) => updatePolicyIx(accounts, new PublicKey(guard.agent), policy, guard.paused),
+        obligation,
+      );
+    },
+
     async migrateGuard({ obligation }) {
       return send((accounts) => migrateGuardIx(accounts), obligation);
     },

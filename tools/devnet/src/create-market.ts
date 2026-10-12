@@ -323,9 +323,18 @@ async function configureReserve(market: PublicKey, reserve: PublicKey, shape: Re
     );
   }
 
-  await send(`open ${shape.label} [depositLimit, borrowLimit]`, [
+  await send(`open ${shape.label} [depositLimit, borrowLimit, outsideElevationBorrowLimit]`, [
     setConfig(market, reserve, UpdateConfigMode.UpdateDepositLimit, u64(shape.depositLimit), true),
     setConfig(market, reserve, UpdateConfigMode.UpdateBorrowLimit, u64(shape.borrowLimit), true),
+    // Ordinary obligations are not in an elevation group. KLend checks this
+    // separate cap for the normal borrow path, and its default is zero.
+    setConfig(
+      market,
+      reserve,
+      UpdateConfigMode.UpdateBorrowLimitOutsideElevationGroup,
+      u64(shape.borrowLimit),
+      true,
+    ),
   ]);
 }
 
